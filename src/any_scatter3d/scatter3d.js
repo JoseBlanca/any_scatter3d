@@ -1,5 +1,9 @@
 import * as THREE from "https://esm.sh/three@0.182.0";
 
+const ROT_SPEED = 0.005;
+const DEF_BACKGROUND_COLOR = "#111111";
+const DEF_POINT_SIZE = 0.05;
+
 function renderPoints(
 	pointCoords,
 	pointColors,
@@ -37,8 +41,11 @@ function renderPoints(
 		colors[i * 3 + 2] = b;
 	}
 
-	geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-	geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+	geometry.setAttribute(
+		"position",
+		new THREE.Float32BufferAttribute(positions, 3),
+	);
+	geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
 
 	const material = new THREE.PointsMaterial({
 		size: pointSize,
@@ -85,8 +92,8 @@ function makePointerHandlers(scene, camera, renderer) {
 		prevX = event.clientX;
 		prevY = event.clientY;
 
-		scene.rotation.y += deltaX * 0.005;
-		scene.rotation.x += deltaY * 0.005;
+		scene.rotation.y += deltaX * ROT_SPEED;
+		scene.rotation.x += deltaY * ROT_SPEED;
 
 		renderer.render(scene, camera);
 	}
@@ -113,9 +120,6 @@ function makeResizeHandler(
 }
 
 function render({ model, el }) {
-	const defaultBackgroundColor = "#111111";
-	const defaultPointSize = 0.05;
-
 	// --- Basic container setup ---
 	el.innerHTML = "";
 	el.style.position = "relative";
@@ -136,8 +140,7 @@ function render({ model, el }) {
 	renderer.setPixelRatio(window.devicePixelRatio || 1);
 	el.appendChild(renderer.domElement);
 
-	// Background from model (or default)
-	const bgColor = model.get("background") || defaultBackgroundColor;
+	const bgColor = model.get("background") || DEF_BACKGROUND_COLOR;
 	renderer.setClearColor(bgColor);
 
 	// --- Lights ---
@@ -173,7 +176,7 @@ function render({ model, el }) {
 	function updatePoints() {
 		const pointCoords = model.get("points") || [];
 		const pointColors = model.get("point_colors") || [];
-		const pointSize = model.get("point_size") ?? defaultPointSize;
+		const pointSize = model.get("point_size") ?? DEF_POINT_SIZE;
 
 		renderPoints(
 			pointCoords,
@@ -187,7 +190,7 @@ function render({ model, el }) {
 	}
 
 	function onBackgroundChange() {
-		const color = model.get("background") || defaultBackgroundColor;
+		const color = model.get("background") || DEF_BACKGROUND_COLOR;
 		renderer.setClearColor(color);
 		renderer.render(scene, camera);
 	}
