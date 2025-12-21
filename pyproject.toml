@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "anywidget[dev]>=0.9.21",
     "marimo>=0.18.4",
+    "numpy>=2.3.5",
 ]
 
 [build-system]
