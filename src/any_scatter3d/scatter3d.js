@@ -1,5 +1,67 @@
 import * as THREE from "https://esm.sh/three@0.182.0";
 
+function renderPoints(
+	pointCoords,
+	pointColors,
+	pointSize,
+	scene,
+	camera,
+	renderer,
+) {
+	let pointsObject = null;
+
+	if (pointsObject) {
+		scene.remove(pointsObject);
+		pointsObject.geometry.dispose();
+		pointsObject.material.dispose();
+		pointsObject = null;
+	}
+
+	if (!Array.isArray(pointCoords) || pointCoords.length === 0) {
+		renderer.render(scene, camera);
+		return;
+	}
+
+	const geometry = new THREE.BufferGeometry();
+	const positions = new Float32Array(pointCoords.length * 3);
+	const colors = new Float32Array(pointCoords.length * 3);
+
+	for (let i = 0; i < pointCoords.length; i++) {
+		const [x, y, z] = pointCoords[i];
+		positions[i * 3] = x;
+		positions[i * 3 + 1] = y;
+		positions[i * 3 + 2] = z;
+
+		const [r, g, b] = pointColors[i] || [0.5, 0.5, 0.5]; // default gray
+		colors[i * 3] = r;
+		colors[i * 3 + 1] = g;
+		colors[i * 3 + 2] = b;
+	}
+
+	geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+	geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+
+	const material = new THREE.PointsMaterial({
+		pointSize,
+		sizeAttenuation: true,
+		vertexColors: true,
+		// optional: color multiplies vertex colors, leave white to see them as-is:
+		color: 0xffffff,
+	});
+
+	pointsObject = new THREE.Points(geometry, material);
+	scene.add(pointsObject);
+
+	geometry.computeBoundingSphere();
+	if (geometry.boundingSphere) {
+		const { center, radius } = geometry.boundingSphere;
+		camera.position.set(center.x, center.y, radius * 3 || 10);
+		camera.lookAt(center);
+	}
+
+	renderer.render(scene, camera);
+}
+
 function render({ model, el }) {
 	const defaultBackgroundColor = "#111111";
 	const defaultPointSize = 0.05;
@@ -33,70 +95,6 @@ function render({ model, el }) {
 	light.position.set(1, 1, 1);
 	scene.add(light);
 	scene.add(new THREE.AmbientLight(0x404040));
-
-	// --- Geometry for points ---
-	let pointsObject = null;
-
-	function buildPoints() {
-		if (pointsObject) {
-			scene.remove(pointsObject);
-			pointsObject.geometry.dispose();
-			pointsObject.material.dispose();
-			pointsObject = null;
-		}
-
-		const pointsData = model.get("points") || []; // [[x,y,z], ...]
-		const colorData = model.get("point_colors") || []; // [[r,g,b], ...]
-
-		console.log("points[0..3] =", pointsData.slice(0, 3));
-		console.log("point_colors[0..3] =", colorData.slice(0, 3));
-
-		const size = model.get("point_size") ?? defaultPointSize;
-
-		if (!Array.isArray(pointsData) || pointsData.length === 0) {
-			renderer.render(scene, camera);
-			return;
-		}
-
-		const geometry = new THREE.BufferGeometry();
-		const positions = new Float32Array(pointsData.length * 3);
-		const colors = new Float32Array(pointsData.length * 3);
-
-		for (let i = 0; i < pointsData.length; i++) {
-			const [x, y, z] = pointsData[i];
-			positions[i * 3] = x;
-			positions[i * 3 + 1] = y;
-			positions[i * 3 + 2] = z;
-
-			const [r, g, b] = colorData[i] || [0.5, 0.5, 0.5]; // default gray
-			colors[i * 3] = r;
-			colors[i * 3 + 1] = g;
-			colors[i * 3 + 2] = b;
-		}
-
-		geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-		geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-
-		const material = new THREE.PointsMaterial({
-			size,
-			sizeAttenuation: true,
-			vertexColors: true,
-			// optional: color multiplies vertex colors, leave white to see them as-is:
-			color: 0xffffff,
-		});
-
-		pointsObject = new THREE.Points(geometry, material);
-		scene.add(pointsObject);
-
-		geometry.computeBoundingSphere();
-		if (geometry.boundingSphere) {
-			const { center, radius } = geometry.boundingSphere;
-			camera.position.set(center.x, center.y, radius * 3 || 10);
-			camera.lookAt(center);
-		}
-
-		renderer.render(scene, camera);
-	}
 
 	// --- Mouse interaction ---
 	let isDragging = false;
@@ -145,9 +143,9 @@ function render({ model, el }) {
 	resizeObserver.observe(el);
 
 	// --- React to model changes ---
-	model.on("change:points", buildPoints);
-	model.on("change:point_colors", buildPoints);
-	model.on("change:point_size", buildPoints);
+	model.on("change:points", renderPoints);
+	model.on("change:point_colors", renderPoints);
+	model.on("change:point_size", renderPoints);
 
 	model.on("change:background", () => {
 		const color = model.get("background") || defaultBackgroundColor;
@@ -155,8 +153,10 @@ function render({ model, el }) {
 		renderer.render(scene, camera);
 	});
 
-	// Initial render
-	buildPoints();
+	const pointCoords = model.get("points") || []; // [[x,y,z], ...]
+	const pointColors = model.get("point_colors") || []; // [[r,g,b], ...]
+	const pointSize = model.get("point_size") ?? defaultPointSize;
+	renderPoints(pointCoords, pointColors, pointSize, scene, camera, renderer);
 
 	// --- Cleanup ---
 	return () => {
