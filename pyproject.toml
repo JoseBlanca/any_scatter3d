@@ -7,9 +7,15 @@ requires-python = ">=3.13"
 dependencies = [
     "anywidget[dev]>=0.9.21",
     "marimo>=0.18.4",
+    "narwhals>=2.14.0",
     "numpy>=2.3.5",
 ]
 
 [build-system]
 requires = ["uv_build"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pandas>=2.3.3",
+]

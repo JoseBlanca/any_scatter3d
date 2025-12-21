@@ -13,29 +13,30 @@ def _():
 
 
 @app.cell
-def _():
+def _(xs):
     from any_scatter3d.scatter3d import Scatter3dWidget
 
     import numpy as np
+    import pandas
 
-    num_points = 20000
+    num_points = 100000
 
-    xs = np.random.randn(num_points).tolist()
-    ys = np.random.randn(num_points).tolist()
-    zs = np.random.randn(num_points).tolist()
+    points = np.random.randn(num_points, 3)
+    points = pandas.DataFrame(points)
 
     w = Scatter3dWidget()
-    w.set_points(xs, ys, zs)
+    w.set_points(points)
     w.point_size = 0.1
     w.background = "#ffffff"
-    colors = []
-    for x in xs:
-        if x < 0:
-            colors.append([0.2, 0.2, 1.0])  # blue-ish
-        else:
-            colors.append([1.0, 0.2, 0.2])  # red-ish
+    if False:
+        colors = []
+        for x in xs:
+            if x < 0:
+                colors.append([0.2, 0.2, 1.0])  # blue-ish
+            else:
+                colors.append([1.0, 0.2, 0.2])  # red-ish
 
-    w.point_colors = colors
+        w.point_colors = colors
 
     w
     return

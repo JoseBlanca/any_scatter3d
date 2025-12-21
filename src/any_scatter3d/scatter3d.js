@@ -26,25 +26,9 @@ function renderPoints(
 	}
 
 	const geometry = new THREE.BufferGeometry();
-	const positions = new Float32Array(pointCoords.length * 3);
 	const colors = new Float32Array(pointCoords.length * 3);
-
-	for (let i = 0; i < pointCoords.length; i++) {
-		const [x, y, z] = pointCoords[i];
-		positions[i * 3] = x;
-		positions[i * 3 + 1] = y;
-		positions[i * 3 + 2] = z;
-
-		const [r, g, b] = pointColors[i] || [0.5, 0.5, 0.5];
-		colors[i * 3] = r;
-		colors[i * 3 + 1] = g;
-		colors[i * 3 + 2] = b;
-	}
-
-	geometry.setAttribute(
-		"position",
-		new THREE.Float32BufferAttribute(positions, 3),
-	);
+	const positions = new Float32Array(pointCoords);
+	geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
 	geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
 
 	const material = new THREE.PointsMaterial({
