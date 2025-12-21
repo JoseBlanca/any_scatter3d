@@ -28,14 +28,20 @@ class Scatter3dWidget(anywidget.AnyWidget):
     def set_points(
         self,
         dframe: IntoFrameT,
-        x_col_idx: int = 0,
-        y_col_idx: int = 1,
-        z_col_idx: int = 2,
+        x_col: str = "x",
+        y_col: str = "y",
+        z_col: str = "z",
     ):
         dframe = narwhals.from_native(dframe)
-        array = (
-            dframe[:, (x_col_idx, y_col_idx, z_col_idx)]
-            .to_numpy()
-            .astype("float32", copy=False)
-        )
+
+        columns = dframe.columns
+
+        try:
+            xyz_cols = [columns.index(col) for col in (x_col, y_col, z_col)]
+        except ValueError:
+            raise ValueError(
+                "Some column not found in data frame: {x_col}, {y_col}, {z_col}"
+            )
+
+        array = dframe[:, xyz_cols].to_numpy().astype("float32", copy=False)
         self.points = array.ravel().tolist()

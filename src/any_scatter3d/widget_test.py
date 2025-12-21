@@ -14,7 +14,7 @@ def _(xs):
     num_points = 100000
 
     points = np.random.randn(num_points, 3)
-    points = pandas.DataFrame(points)
+    points = pandas.DataFrame(points, columns=['x', 'y', 'z'])
 
     w = Scatter3dWidget()
     w.set_points(points)
