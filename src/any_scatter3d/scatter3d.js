@@ -42,10 +42,10 @@ function renderPoints(
 	geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
 
 	const material = new THREE.PointsMaterial({
-		pointSize,
+		size: pointSize,
 		sizeAttenuation: true,
 		vertexColors: true,
-		// optional: color multiplies vertex colors, leave white to see them as-is:
+		// color multiplies vertex colors, leave white to see them as-is:
 		color: 0xffffff,
 	});
 
