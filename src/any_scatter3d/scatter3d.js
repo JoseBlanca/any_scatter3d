@@ -7,14 +7,13 @@ function renderPoints(
 	scene,
 	camera,
 	renderer,
+	pointsObjectRef,
 ) {
-	let pointsObject = null;
-
-	if (pointsObject) {
-		scene.remove(pointsObject);
-		pointsObject.geometry.dispose();
-		pointsObject.material.dispose();
-		pointsObject = null;
+	if (pointsObjectRef.current) {
+		scene.remove(pointsObjectRef.current);
+		pointsObjectRef.current.geometry.dispose();
+		pointsObjectRef.current.material.dispose();
+		pointsObjectRef.current = null;
 	}
 
 	if (!Array.isArray(pointCoords) || pointCoords.length === 0) {
@@ -49,7 +48,8 @@ function renderPoints(
 		color: 0xffffff,
 	});
 
-	pointsObject = new THREE.Points(geometry, material);
+	const pointsObject = new THREE.Points(geometry, material);
+	pointsObjectRef.current = pointsObject;
 	scene.add(pointsObject);
 
 	geometry.computeBoundingSphere();
@@ -142,10 +142,28 @@ function render({ model, el }) {
 	const resizeObserver = new ResizeObserver(onResize);
 	resizeObserver.observe(el);
 
+	const pointsObjectRef = { current: null };
+
 	// --- React to model changes ---
-	model.on("change:points", renderPoints);
-	model.on("change:point_colors", renderPoints);
-	model.on("change:point_size", renderPoints);
+	function updatePoints() {
+		const pointCoords = model.get("points") || [];
+		const pointColors = model.get("point_colors") || [];
+		const pointSize = model.get("point_size") ?? defaultPointSize;
+
+		renderPoints(
+			pointCoords,
+			pointColors,
+			pointSize,
+			scene,
+			camera,
+			renderer,
+			pointsObjectRef,
+		);
+	}
+
+	model.on("change:points", updatePoints);
+	model.on("change:point_colors", updatePoints);
+	model.on("change:point_size", updatePoints);
 
 	model.on("change:background", () => {
 		const color = model.get("background") || defaultBackgroundColor;
@@ -153,10 +171,8 @@ function render({ model, el }) {
 		renderer.render(scene, camera);
 	});
 
-	const pointCoords = model.get("points") || []; // [[x,y,z], ...]
-	const pointColors = model.get("point_colors") || []; // [[r,g,b], ...]
-	const pointSize = model.get("point_size") ?? defaultPointSize;
-	renderPoints(pointCoords, pointColors, pointSize, scene, camera, renderer);
+	// Initial render
+	updatePoints();
 
 	// --- Cleanup ---
 	return () => {
@@ -165,10 +181,10 @@ function render({ model, el }) {
 		window.removeEventListener("pointerup", onPointerUp);
 		window.removeEventListener("pointermove", onPointerMove);
 
-		if (pointsObject) {
-			scene.remove(pointsObject);
-			pointsObject.geometry.dispose();
-			pointsObject.material.dispose();
+		if (pointsObjectRef.current) {
+			scene.remove(pointsObjectRef.current);
+			pointsObjectRef.current.geometry.dispose();
+			pointsObjectRef.current.material.dispose();
 		}
 
 		renderer.dispose();

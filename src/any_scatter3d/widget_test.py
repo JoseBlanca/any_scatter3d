@@ -26,7 +26,7 @@ def _():
 
     w = Scatter3dWidget()
     w.set_points(xs, ys, zs)
-    w.point_size = 0.05
+    w.point_size = 0.1
     w.background = "#ffffff"
     colors = []
     for x in xs:
