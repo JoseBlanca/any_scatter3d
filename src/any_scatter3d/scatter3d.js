@@ -31,7 +31,7 @@ function renderPoints(
 		positions[i * 3 + 1] = y;
 		positions[i * 3 + 2] = z;
 
-		const [r, g, b] = pointColors[i] || [0.5, 0.5, 0.5]; // default gray
+		const [r, g, b] = pointColors[i] || [0.5, 0.5, 0.5];
 		colors[i * 3] = r;
 		colors[i * 3 + 1] = g;
 		colors[i * 3 + 2] = b;
@@ -44,7 +44,6 @@ function renderPoints(
 		size: pointSize,
 		sizeAttenuation: true,
 		vertexColors: true,
-		// color multiplies vertex colors, leave white to see them as-is:
 		color: 0xffffff,
 	});
 
@@ -60,6 +59,57 @@ function renderPoints(
 	}
 
 	renderer.render(scene, camera);
+}
+
+function makePointerHandlers(scene, camera, renderer) {
+	let isDragging = false;
+	let prevX = 0;
+	let prevY = 0;
+
+	function onPointerDown(event) {
+		isDragging = true;
+		prevX = event.clientX;
+		prevY = event.clientY;
+	}
+
+	function onPointerUp() {
+		isDragging = false;
+	}
+
+	function onPointerMove(event) {
+		if (!isDragging) return;
+
+		const deltaX = event.clientX - prevX;
+		const deltaY = event.clientY - prevY;
+
+		prevX = event.clientX;
+		prevY = event.clientY;
+
+		scene.rotation.y += deltaX * 0.005;
+		scene.rotation.x += deltaY * 0.005;
+
+		renderer.render(scene, camera);
+	}
+
+	return { onPointerDown, onPointerUp, onPointerMove };
+}
+
+function makeResizeHandler(
+	el,
+	scene,
+	camera,
+	renderer,
+	initialWidth,
+	initialHeight,
+) {
+	return function onResize() {
+		const w = el.clientWidth || initialWidth;
+		const h = el.clientHeight || initialHeight;
+		camera.aspect = w / h;
+		camera.updateProjectionMatrix();
+		renderer.setSize(w, h);
+		renderer.render(scene, camera);
+	};
 }
 
 function render({ model, el }) {
@@ -96,49 +146,24 @@ function render({ model, el }) {
 	scene.add(light);
 	scene.add(new THREE.AmbientLight(0x404040));
 
-	// --- Mouse interaction ---
-	let isDragging = false;
-	let prevX = 0;
-	let prevY = 0;
-
-	function onPointerDown(event) {
-		isDragging = true;
-		prevX = event.clientX;
-		prevY = event.clientY;
-	}
-
-	function onPointerUp() {
-		isDragging = false;
-	}
-
-	function onPointerMove(event) {
-		if (!isDragging) return;
-		const deltaX = event.clientX - prevX;
-		const deltaY = event.clientY - prevY;
-		prevX = event.clientX;
-		prevY = event.clientY;
-
-		const rotSpeed = 0.005;
-		scene.rotation.y += deltaX * rotSpeed;
-		scene.rotation.x += deltaY * rotSpeed;
-
-		renderer.render(scene, camera);
-	}
+	const { onPointerDown, onPointerUp, onPointerMove } = makePointerHandlers(
+		scene,
+		camera,
+		renderer,
+	);
 
 	renderer.domElement.addEventListener("pointerdown", onPointerDown);
 	window.addEventListener("pointerup", onPointerUp);
 	window.addEventListener("pointermove", onPointerMove);
 
-	// --- Resize handling ---
-	function onResize() {
-		const w = el.clientWidth || width;
-		const h = el.clientHeight || height;
-		camera.aspect = w / h;
-		camera.updateProjectionMatrix();
-		renderer.setSize(w, h);
-		renderer.render(scene, camera);
-	}
-
+	const onResize = makeResizeHandler(
+		el,
+		scene,
+		camera,
+		renderer,
+		width,
+		height,
+	);
 	const resizeObserver = new ResizeObserver(onResize);
 	resizeObserver.observe(el);
 
@@ -161,15 +186,19 @@ function render({ model, el }) {
 		);
 	}
 
-	model.on("change:points", updatePoints);
-	model.on("change:point_colors", updatePoints);
-	model.on("change:point_size", updatePoints);
-
-	model.on("change:background", () => {
+	function onBackgroundChange() {
 		const color = model.get("background") || defaultBackgroundColor;
 		renderer.setClearColor(color);
 		renderer.render(scene, camera);
-	});
+	}
+
+	// Register listeners
+	if (model.on) {
+		model.on("change:points", updatePoints);
+		model.on("change:point_colors", updatePoints);
+		model.on("change:point_size", updatePoints);
+		model.on("change:background", onBackgroundChange);
+	}
 
 	// Initial render
 	updatePoints();
@@ -180,6 +209,13 @@ function render({ model, el }) {
 		renderer.domElement.removeEventListener("pointerdown", onPointerDown);
 		window.removeEventListener("pointerup", onPointerUp);
 		window.removeEventListener("pointermove", onPointerMove);
+
+		if (model.off) {
+			model.off("change:points", updatePoints);
+			model.off("change:point_colors", updatePoints);
+			model.off("change:point_size", updatePoints);
+			model.off("change:background", onBackgroundChange);
+		}
 
 		if (pointsObjectRef.current) {
 			scene.remove(pointsObjectRef.current);
