@@ -5,14 +5,6 @@ app = marimo.App(width="medium")
 
 
 @app.cell
-def _():
-    from any_scatter3d.counter import CounterWidget
-
-    CounterWidget()
-    return
-
-
-@app.cell
 def _(xs):
     from any_scatter3d.scatter3d import Scatter3dWidget
 
