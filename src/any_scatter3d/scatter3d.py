@@ -65,37 +65,108 @@ class Scatter3dWidget(anywidget.AnyWidget):
     points = traitlets.List(traitlets.Float()).tag(
         sync=True
     )  # flat list [x0,y0,z0,x1,y1,z1,...]
-    point_size = traitlets.Float(DEFAULT_POINT_SIZE).tag(sync=True)
-    background = traitlets.Unicode(WHITE).tag(sync=True)
     category_colors = traitlets.Dict(
         key_trait=traitlets.Unicode(),
         value_trait=traitlets.List(trait=traitlets.Float(), minlen=3, maxlen=3),
     ).tag(sync=True)
     categories = traitlets.List(trait=traitlets.Unicode()).tag(sync=True)
 
-    def set_points(
+    point_size = traitlets.Float(DEFAULT_POINT_SIZE).tag(sync=True)
+    background = traitlets.Unicode(WHITE).tag(sync=True)
+
+    def __init__(
         self,
         dframe: IntoFrameT,
         x_col: str = "x",
         y_col: str = "y",
         z_col: str = "z",
-        categories_col: Sequence[str | int] = "category",
+        categories_col: str = "category",
+        **kwargs,
     ):
-        dframe = narwhals.from_native(dframe)
+        super().__init__(**kwargs)
+        self._dframe = narwhals.from_native(dframe)
 
-        columns = dframe.columns
+        self._x_col = None
+        self._y_col = None
+        self._z_col = None
+        self._x_col_idx = None
+        self._y_col_idx = None
+        self._z_col_idx = None
+        self.x_col = x_col
+        self.y_col = y_col
+        self.z_col = z_col
 
-        try:
-            xyz_cols = [columns.index(col) for col in (x_col, y_col, z_col)]
-        except ValueError:
+        self._categories_col = None
+        self.categories_col = categories_col
+
+        self.set_points()
+
+    def _get_categories_col(self):
+        return self._categories_col
+
+    def _set_categories_col(self, col: str):
+        columns = self._dframe.columns
+        if col not in columns:
             raise ValueError(
-                "Some column not found in data frame: {x_col}, {y_col}, {z_col}"
+                f"categories col: {col} not found in the data frame columns: {self._dframe.columns}"
             )
+        self._categories_col = col
+
+    categories_col = property(_get_categories_col, _set_categories_col)
+
+    def _get_x_col(self):
+        return self._x_col
+
+    def _set_x_col(self, col: str):
+        columns = self._dframe.columns
+        if col not in columns:
+            raise ValueError(
+                f"x_col: {col} not found in the data frame columns: {self._dframe.columns}"
+            )
+        self._x_col_idx = columns.index(col)
+        self._x_col = col
+
+    x_col = property(_get_x_col, _set_x_col)
+
+    def _get_y_col(self):
+        return self._y_col
+
+    def _set_y_col(self, col: str):
+        columns = self._dframe.columns
+        if col not in columns:
+            raise ValueError(
+                f"y_col: {col} not found in the data frame columns: {self._dframe.columns}"
+            )
+        self._y_col_idx = columns.index(col)
+        self._y_col = col
+
+    y_col = property(_get_y_col, _set_y_col)
+
+    def _get_z_col(self):
+        return self._z_col
+
+    def _set_z_col(self, col: str):
+        columns = self._dframe.columns
+        if col not in columns:
+            raise ValueError(
+                f"x_col: {col} not found in the data frame columns: {self._dframe.columns}"
+            )
+        self._z_col_idx = columns.index(col)
+        self._z_col = col
+
+    z_col = property(_get_z_col, _set_z_col)
+
+    def set_points(
+        self,
+    ):
+        dframe = self._dframe
+
+        xyz_cols = (self._x_col_idx, self._y_col_idx, self._z_col_idx)
 
         array = dframe[:, xyz_cols].to_numpy().astype("float32", copy=False)
         self.points = array.ravel().tolist()
 
-        categories = dframe.get_column(categories_col)
+        categories = dframe.get_column(self.categories_col)
 
         different_categories = sorted(set(categories))
         color_cycle = cycle(TAB20_COLORS_RGB)
