@@ -3,6 +3,8 @@ import * as THREE from "https://esm.sh/three@0.182.0";
 const ROT_SPEED = 0.005;
 const DEF_BACKGROUND_COLOR = "#111111";
 const DEF_POINT_SIZE = 0.05;
+const LIGHT_GREY = [0.7, 0.7, 0.7];
+const DEF_POINT_COLOR = LIGHT_GREY;
 
 function renderPoints(
 	pointCoords,
@@ -26,9 +28,9 @@ function renderPoints(
 	}
 
 	const geometry = new THREE.BufferGeometry();
-	const colors = new Float32Array(pointCoords.length * 3);
 	const positions = new Float32Array(pointCoords);
 	geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+	const colors = new Float32Array(pointColors); // flat list [r,g,b,r,g,b,...]
 	geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
 
 	const material = new THREE.PointsMaterial({
@@ -103,6 +105,26 @@ function makeResizeHandler(
 	};
 }
 
+function create_point_colors_from_categories(model) {
+	const categories = model.get("categories") || [];
+	const categoryColors = model.get("category_colors") || {};
+
+	const n = categories.length;
+	const out = new Float32Array(n * 3);
+
+	for (let i = 0; i < n; i++) {
+		const cat = categories[i];
+		const rgb = categoryColors[cat] || DEF_POINT_COLOR;
+
+		// rgb must be array-like: [r,g,b]
+		out[i * 3 + 0] = rgb[0] || 0;
+		out[i * 3 + 1] = rgb[1] || 0;
+		out[i * 3 + 2] = rgb[2] || 0;
+	}
+
+	return out;
+}
+
 function render({ model, el }) {
 	// --- Basic container setup ---
 	el.innerHTML = "";
@@ -159,7 +181,7 @@ function render({ model, el }) {
 	// --- React to model changes ---
 	function updatePoints() {
 		const pointCoords = model.get("points") || [];
-		const pointColors = model.get("point_colors") || [];
+		const pointColors = create_point_colors_from_categories(model);
 		const pointSize = model.get("point_size") ?? DEF_POINT_SIZE;
 
 		renderPoints(

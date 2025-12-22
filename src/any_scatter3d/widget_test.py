@@ -5,30 +5,29 @@ app = marimo.App(width="medium")
 
 
 @app.cell
-def _(xs):
+def _():
+    import random
     from any_scatter3d.scatter3d import Scatter3dWidget
 
     import numpy as np
     import pandas
 
-    num_points = 100000
+    num_points = 2000
 
     points = np.random.randn(num_points, 3)
-    points = pandas.DataFrame(points, columns=['x', 'y', 'z'])
+    possible_categories = ['species1', 'species2', 'species3']
+
+    points = pandas.DataFrame({
+        'x': np.random.randn(num_points),
+        'y': np.random.randn(num_points),
+        'z': np.random.randn(num_points),
+        'category': random.choices(possible_categories, k=num_points)
+    })
 
     w = Scatter3dWidget()
     w.set_points(points)
-    w.point_size = 0.1
+    w.point_size = 0.2
     w.background = "#ffffff"
-    if False:
-        colors = []
-        for x in xs:
-            if x < 0:
-                colors.append([0.2, 0.2, 1.0])  # blue-ish
-            else:
-                colors.append([1.0, 0.2, 0.2])  # red-ish
-
-        w.point_colors = colors
 
     w
     return
