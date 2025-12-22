@@ -73,6 +73,7 @@ function makePointerHandlers(scene, camera, renderer, getInteractionMode) {
 		const mode = getInteractionMode();
 		if (mode !== "rotate") {
 			isDragging = false;
+			// lasso handling will go here later
 			return;
 		}
 		isDragging = true;
@@ -139,6 +140,8 @@ function addControlBar(el, controlApi) {
 	const {
 		getInteractionMode,
 		setInteractionMode,
+		getLassoOperation,
+		setLassoOperation,
 		getCategoryColumns,
 		getCurrentCategoryColumn,
 		setCurrentCategoryColumn,
@@ -146,40 +149,134 @@ function addControlBar(el, controlApi) {
 
 	const controls = document.createElement("div");
 	controls.style.display = "flex";
-	controls.style.gap = "0.75rem";
-	controls.style.alignItems = "center";
+	controls.style.flexDirection = "column";
+	controls.style.gap = "0.25rem";
 	controls.style.marginBottom = "0.5rem";
-	controls.style.flexWrap = "wrap";
 
-	// --- Rotate / Lasso button (pure JS state) ---
-	const modeButton = document.createElement("button");
-	modeButton.className = "scatter3d-button rotate";
+	// ---------- Top row: Mode + Operation ----------
 
-	function syncModeButtonLabel() {
-		const mode = getInteractionMode();
-		modeButton.textContent = mode === "rotate" ? "Rotate" : "Lasso";
-		modeButton.className = `scatter3d-button ${mode}`;
+	const topRow = document.createElement("div");
+	topRow.style.display = "flex";
+	topRow.style.flexWrap = "wrap";
+	topRow.style.gap = "0.5rem";
+	topRow.style.alignItems = "center";
+
+	// Mode: Rotate | Lasso
+	const modeLabel = document.createElement("span");
+	modeLabel.textContent = "Mode:";
+	modeLabel.style.fontSize = "13px";
+	modeLabel.style.fontFamily = "sans-serif";
+
+	function styleModeButton(btn, isActive) {
+		btn.style.padding = "2px 8px";
+		btn.style.borderRadius = "4px";
+		btn.style.border = "1px solid #444";
+		btn.style.cursor = "pointer";
+		btn.style.fontSize = "12px";
+
+		if (isActive) {
+			// Active state: blue (matches Add)
+			btn.style.background = "#2563eb"; // blue
+			btn.style.color = "#fff";
+		} else {
+			// Inactive state: grey
+			btn.style.background = "#222"; // dark grey
+			btn.style.color = "#aaa";
+		}
 	}
 
-	syncModeButtonLabel();
+	const rotateButton = document.createElement("button");
+	rotateButton.textContent = "Rotate";
 
-	modeButton.addEventListener("click", () => {
-		const current = getInteractionMode();
-		const next = current === "rotate" ? "lasso" : "rotate";
-		setInteractionMode(next);
-		syncModeButtonLabel();
-	});
+	const lassoButton = document.createElement("button");
+	lassoButton.textContent = "Lasso";
 
-	controls.appendChild(modeButton);
+	// Operation: + Add | – Remove (only visible in lasso mode)
+	const opContainer = document.createElement("div");
+	opContainer.style.display = "none"; // hidden in rotate mode
+	opContainer.style.alignItems = "center";
+	opContainer.style.gap = "0.25rem";
 
-	// --- Category column dropdown ---
-	const catColLabel = document.createElement("label");
-	catColLabel.textContent = "";
+	const opLabel = document.createElement("span");
+	opLabel.textContent = "Operation:";
+	opLabel.style.fontSize = "13px";
+	opLabel.style.fontFamily = "sans-serif";
+
+	const addButton = document.createElement("button");
+	addButton.textContent = "+ Add";
+
+	const removeButton = document.createElement("button");
+	removeButton.textContent = "– Remove";
+
+	function styleOpButton(btn, activeColor, isActive) {
+		btn.style.padding = "2px 8px";
+		btn.style.borderRadius = "4px";
+		btn.style.border = "1px solid #444";
+		btn.style.cursor = "pointer";
+		btn.style.fontSize = "12px";
+		if (isActive) {
+			btn.style.background = activeColor;
+			btn.style.color = "#fff";
+		} else {
+			btn.style.background = "#222";
+			btn.style.color = "#aaa";
+		}
+	}
+
+	opContainer.appendChild(opLabel);
+	opContainer.appendChild(addButton);
+	opContainer.appendChild(removeButton);
+
+	topRow.appendChild(modeLabel);
+	topRow.appendChild(rotateButton);
+	topRow.appendChild(lassoButton);
+	topRow.appendChild(opContainer);
+
+	controls.appendChild(topRow);
+
+	// ---------- Second row: Category column dropdown ----------
+
+	const bottomRow = document.createElement("div");
+	bottomRow.style.display = "flex";
+	bottomRow.style.alignItems = "center";
+	bottomRow.style.gap = "0.5rem";
+
+	const catColLabel = document.createElement("span");
+	catColLabel.textContent = "Category column:";
 	catColLabel.style.fontSize = "13px";
 	catColLabel.style.fontFamily = "sans-serif";
 
 	const catColSelect = document.createElement("select");
-	catColSelect.className = "scatter3d-select";
+	catColSelect.style.fontSize = "13px";
+
+	catColLabel.appendChild(catColSelect);
+	bottomRow.appendChild(catColLabel);
+	controls.appendChild(bottomRow);
+
+	// ---------- Sync helpers ----------
+
+	function syncModeButtons() {
+		const mode = getInteractionMode();
+
+		// Mode buttons: blue = active, grey = inactive
+		styleModeButton(rotateButton, mode === "rotate");
+		styleModeButton(lassoButton, mode === "lasso");
+
+		// Show/hide lasso operations
+		if (mode === "rotate") {
+			opContainer.style.display = "none";
+		} else {
+			opContainer.style.display = "flex";
+		}
+	}
+
+	function syncOperationButtons() {
+		const op = getLassoOperation();
+
+		// add = blue, remove = red
+		styleOpButton(addButton, "#2563eb", op === "add");
+		styleOpButton(removeButton, "#b91c1c", op === "remove");
+	}
 
 	function syncCategoryColumnOptions() {
 		const cols = getCategoryColumns();
@@ -203,22 +300,44 @@ function addControlBar(el, controlApi) {
 		}
 	}
 
+	// Initial sync
+	syncModeButtons();
+	syncOperationButtons();
 	syncCategoryColumnOptions();
+
+	// ---------- Event listeners ----------
+
+	rotateButton.addEventListener("click", () => {
+		setInteractionMode("rotate");
+		syncModeButtons();
+	});
+
+	lassoButton.addEventListener("click", () => {
+		setInteractionMode("lasso");
+		syncModeButtons();
+	});
+
+	addButton.addEventListener("click", () => {
+		setLassoOperation("add");
+		syncOperationButtons();
+	});
+
+	removeButton.addEventListener("click", () => {
+		setLassoOperation("remove");
+		syncOperationButtons();
+	});
 
 	catColSelect.addEventListener("change", () => {
 		const value = catColSelect.value;
 		setCurrentCategoryColumn(value);
 	});
 
-	catColLabel.appendChild(catColSelect);
-	controls.appendChild(catColLabel);
-
 	el.appendChild(controls);
 
 	return {
 		controls,
 		dispose() {
-			// placeholder for future listeners
+			// placeholder for future cleanup if needed
 		},
 	};
 }
@@ -231,8 +350,9 @@ function render({ model, el }) {
 	el.style.display = "flex";
 	el.style.flexDirection = "column";
 
-	// --- JS-side state (source of truth for categories + interaction mode) ---
-	let interactionMode = "rotate";
+	// --- JS-side state ---
+	let interactionMode = "rotate"; // "rotate" | "lasso"
+	let lassoOperation = "add"; // "add" | "remove"
 
 	let categoriesState = clone(model.get("categories_t") || {});
 	let colorsByCol = model.get("categories_colors_t") || {};
@@ -253,6 +373,10 @@ function render({ model, el }) {
 		getInteractionMode: () => interactionMode,
 		setInteractionMode: (mode) => {
 			interactionMode = mode;
+		},
+		getLassoOperation: () => lassoOperation,
+		setLassoOperation: (op) => {
+			lassoOperation = op;
 		},
 		getCategoryColumns: () => Object.keys(categoriesState),
 		getCurrentCategoryColumn: () => currentCategoryColumn,
