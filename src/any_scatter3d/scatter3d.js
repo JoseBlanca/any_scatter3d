@@ -7,6 +7,11 @@ const LIGHT_GREY = [0.7, 0.7, 0.7];
 const DEF_POINT_COLOR = LIGHT_GREY;
 const ASPECT_RATIO = 3 / 2;
 
+// Simple JSON-based clone: safe here (only strings / numbers)
+function clone(obj) {
+	return obj ? JSON.parse(JSON.stringify(obj)) : {};
+}
+
 function renderPoints(
 	pointCoords,
 	pointColors,
@@ -56,13 +61,13 @@ function renderPoints(
 	renderer.render(scene, camera);
 }
 
-function makePointerHandlers(model, scene, camera, renderer) {
+function makePointerHandlers(scene, camera, renderer, getInteractionMode) {
 	let isDragging = false;
 	let prevX = 0;
 	let prevY = 0;
 
 	function onPointerDown(event) {
-		const mode = model.get("interaction_mode") || "rotate";
+		const mode = getInteractionMode();
 		if (mode !== "rotate") {
 			isDragging = false;
 			return;
@@ -79,7 +84,7 @@ function makePointerHandlers(model, scene, camera, renderer) {
 	function onPointerMove(event) {
 		if (!isDragging) return;
 
-		const mode = model.get("interaction_mode") || "rotate";
+		const mode = getInteractionMode();
 		if (mode !== "rotate") {
 			return;
 		}
@@ -99,16 +104,26 @@ function makePointerHandlers(model, scene, camera, renderer) {
 	return { onPointerDown, onPointerUp, onPointerMove };
 }
 
-function create_point_colors_from_categories(model) {
-	const categories = model.get("categories") || [];
-	const categoryColors = model.get("category_colors") || {};
+// Build color array for the currently selected category column
+function createPointColors(categoriesState, colorsByCol, currentCol) {
+	if (!currentCol) {
+		// no category column selected; just use default color
+		const anyCol = Object.keys(categoriesState)[0];
+		if (!anyCol) {
+			return new Float32Array(0);
+		}
+		currentCol = anyCol;
+	}
 
-	const n = categories.length;
+	const cats = categoriesState[currentCol] || [];
+	const colorMap = colorsByCol[currentCol] || {};
+
+	const n = cats.length;
 	const out = new Float32Array(n * 3);
 
 	for (let i = 0; i < n; i++) {
-		const cat = categories[i];
-		const rgb = categoryColors[cat] || DEF_POINT_COLOR;
+		const cat = cats[i];
+		const rgb = colorMap[cat] || DEF_POINT_COLOR;
 
 		out[i * 3 + 0] = rgb[0] || 0;
 		out[i * 3 + 1] = rgb[1] || 0;
@@ -118,18 +133,28 @@ function create_point_colors_from_categories(model) {
 	return out;
 }
 
-function addControlBar(model, el) {
+function addControlBar(el, controlApi) {
+	const {
+		getInteractionMode,
+		setInteractionMode,
+		getCategoryColumns,
+		getCurrentCategoryColumn,
+		setCurrentCategoryColumn,
+	} = controlApi;
+
 	const controls = document.createElement("div");
 	controls.style.display = "flex";
-	controls.style.gap = "0.5rem";
+	controls.style.gap = "0.75rem";
 	controls.style.alignItems = "center";
 	controls.style.marginBottom = "0.5rem";
+	controls.style.flexWrap = "wrap";
 
+	// --- Rotate / Lasso button (pure JS state) ---
 	const modeButton = document.createElement("button");
 	modeButton.className = "scatter3d-button rotate";
 
 	function syncModeButtonLabel() {
-		const mode = model.get("interaction_mode") || "rotate";
+		const mode = getInteractionMode();
 		modeButton.textContent = mode === "rotate" ? "Rotate" : "Lasso";
 		modeButton.className = `scatter3d-button ${mode}`;
 	}
@@ -137,25 +162,56 @@ function addControlBar(model, el) {
 	syncModeButtonLabel();
 
 	modeButton.addEventListener("click", () => {
-		const current = model.get("interaction_mode") || "rotate";
+		const current = getInteractionMode();
 		const next = current === "rotate" ? "lasso" : "rotate";
-		model.set("interaction_mode", next);
-		model.save_changes();
+		setInteractionMode(next);
 		syncModeButtonLabel();
 	});
 
-	if (model.on) {
-		model.on("change:interaction_mode", syncModeButtonLabel);
+	controls.appendChild(modeButton);
+
+	// --- Category column dropdown ---
+	const catColLabel = document.createElement("label");
+	catColLabel.textContent = "Category column:";
+	catColLabel.style.fontSize = "13px";
+	catColLabel.style.fontFamily = "sans-serif";
+
+	const catColSelect = document.createElement("select");
+	catColSelect.className = "scatter3d-select";
+
+	function syncCategoryColumnOptions() {
+		const cols = getCategoryColumns();
+		const current = getCurrentCategoryColumn();
+
+		catColSelect.innerHTML = "";
+
+		for (const col of cols) {
+			const opt = document.createElement("option");
+			opt.value = col;
+			opt.textContent = col;
+			if (col === current) {
+				opt.selected = true;
+			}
+			catColSelect.appendChild(opt);
+		}
+
+		if (cols.length > 0 && !cols.includes(current)) {
+			catColSelect.value = cols[0];
+			setCurrentCategoryColumn(cols[0]);
+		}
 	}
 
-	controls.appendChild(modeButton);
-	el.appendChild(controls);
+	syncCategoryColumnOptions();
 
-	return function disposeControlBar() {
-		if (model.off) {
-			model.off("change:interaction_mode", syncModeButtonLabel);
-		}
-	};
+	catColSelect.addEventListener("change", () => {
+		const value = catColSelect.value;
+		setCurrentCategoryColumn(value);
+	});
+
+	catColLabel.appendChild(catColSelect);
+	controls.appendChild(catColLabel);
+
+	el.appendChild(controls);
 }
 
 function render({ model, el }) {
@@ -163,12 +219,43 @@ function render({ model, el }) {
 	el.innerHTML = "";
 	el.style.position = "relative";
 	el.style.width = "100%";
-	// do not force height:100%; let content define it
 	el.style.minHeight = "300px";
 	el.style.display = "flex";
 	el.style.flexDirection = "column";
 
-	const disposeControlBar = addControlBar(model, el);
+	// --- JS-side state (source of truth for categories + interaction mode) ---
+	let interactionMode = "rotate";
+
+	// categories_t: { colName: [cat0, cat1, ...] }
+	let categoriesState = clone(model.get("categories_t") || {});
+	// categories_colors_t: { colName: { catStr: [r,g,b], ... } }
+	let colorsByCol = model.get("categories_colors_t") || {};
+
+	let currentCategoryColumn = null;
+
+	function ensureCurrentCategoryColumn() {
+		const cols = Object.keys(categoriesState);
+		if (!currentCategoryColumn || !cols.includes(currentCategoryColumn)) {
+			currentCategoryColumn = cols.length > 0 ? cols[0] : null;
+		}
+	}
+
+	ensureCurrentCategoryColumn();
+
+	// --- Control bar ---
+	addControlBar(el, {
+		getInteractionMode: () => interactionMode,
+		setInteractionMode: (mode) => {
+			interactionMode = mode;
+			// when we implement lasso, we'll act on this
+		},
+		getCategoryColumns: () => Object.keys(categoriesState),
+		getCurrentCategoryColumn: () => currentCategoryColumn,
+		setCurrentCategoryColumn: (col) => {
+			currentCategoryColumn = col;
+			updatePoints(); // recolor points when column changes
+		},
+	});
 
 	// --- View container for Three.js ---
 	const view = document.createElement("div");
@@ -180,7 +267,7 @@ function render({ model, el }) {
 
 	// --- Three.js essentials ---
 	const scene = new THREE.Scene();
-	const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000); // aspect fixed later
+	const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
 	camera.position.set(0, 0, 10);
 
 	const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -192,10 +279,8 @@ function render({ model, el }) {
 	// --- Resize logic (responsive) ---
 	function resizeRenderer() {
 		const containerWidth = el.clientWidth || 600;
-		const aspect = ASPECT_RATIO;
-		const height = Math.max(containerWidth / aspect, 300);
+		const height = Math.max(containerWidth / ASPECT_RATIO, 300);
 
-		// set view height so flex layout has something concrete
 		view.style.height = `${height}px`;
 
 		camera.aspect = containerWidth / height;
@@ -205,7 +290,6 @@ function render({ model, el }) {
 		renderer.render(scene, camera);
 	}
 
-	// initial sizing
 	resizeRenderer();
 
 	const resizeObserver = new ResizeObserver(resizeRenderer);
@@ -218,10 +302,10 @@ function render({ model, el }) {
 	scene.add(new THREE.AmbientLight(0x404040));
 
 	const { onPointerDown, onPointerUp, onPointerMove } = makePointerHandlers(
-		model,
 		scene,
 		camera,
 		renderer,
+		() => interactionMode,
 	);
 
 	renderer.domElement.addEventListener("pointerdown", onPointerDown);
@@ -231,9 +315,21 @@ function render({ model, el }) {
 	const pointsObjectRef = { current: null };
 
 	// --- React to model changes ---
+
+	function getPointCoords() {
+		// new trait name from Python
+		return model.get("points_t") || [];
+	}
+
 	function updatePoints() {
-		const pointCoords = model.get("points") || [];
-		const pointColors = create_point_colors_from_categories(model);
+		ensureCurrentCategoryColumn();
+
+		const pointCoords = getPointCoords();
+		const pointColors = createPointColors(
+			categoriesState,
+			colorsByCol,
+			currentCategoryColumn,
+		);
 		const pointSize = model.get("point_size") ?? DEF_POINT_SIZE;
 
 		renderPoints(
@@ -254,7 +350,17 @@ function render({ model, el }) {
 	}
 
 	if (model.on) {
-		model.on("change:points", updatePoints);
+		// if Python ever changes the data, update JS state & rerender
+		model.on("change:points_t", updatePoints);
+		model.on("change:categories_t", () => {
+			categoriesState = clone(model.get("categories_t") || {});
+			ensureCurrentCategoryColumn();
+			updatePoints();
+		});
+		model.on("change:categories_colors_t", () => {
+			colorsByCol = model.get("categories_colors_t") || {};
+			updatePoints();
+		});
 		model.on("change:point_size", updatePoints);
 		model.on("change:background", onBackgroundChange);
 	}
@@ -270,12 +376,12 @@ function render({ model, el }) {
 		window.removeEventListener("pointermove", onPointerMove);
 
 		if (model.off) {
-			model.off("change:points", updatePoints);
+			model.off("change:points_t", updatePoints);
+			model.off("change:categories_t", () => {});
+			model.off("change:categories_colors_t", () => {});
 			model.off("change:point_size", updatePoints);
 			model.off("change:background", onBackgroundChange);
 		}
-
-		disposeControlBar();
 
 		if (pointsObjectRef.current) {
 			scene.remove(pointsObjectRef.current);

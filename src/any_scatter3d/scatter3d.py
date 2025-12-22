@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Sequence
 from itertools import cycle
 
 import anywidget
@@ -12,28 +11,6 @@ PACKAGE_DIR = Path(__file__).parent
 DARK_GREY = "#111111"
 WHITE = "#ffffff"
 DEFAULT_POINT_SIZE = 0.05
-TAB20_COLORS = [
-    "#1f77b4",
-    "#aec7e8",
-    "#ff7f0e",
-    "#ffbb78",
-    "#2ca02c",
-    "#98df8a",
-    "#d62728",
-    "#ff9896",
-    "#9467bd",
-    "#c5b0d5",
-    "#8c564b",
-    "#c49c94",
-    "#e377c2",
-    "#f7b6d2",
-    "#7f7f7f",
-    "#c7c7c7",
-    "#bcbd22",
-    "#dbdb8d",
-    "#17becf",
-    "#9edae5",
-]
 TAB20_COLORS_RGB = [
     (0.12156862745098039, 0.4666666666666667, 0.7058823529411765),
     (0.6823529411764706, 0.7803921568627451, 0.9098039215686274),
@@ -62,14 +39,29 @@ class Scatter3dWidget(anywidget.AnyWidget):
     _esm = PACKAGE_DIR / "scatter3d.js"
     _css = PACKAGE_DIR / "scatter3d.css"
 
-    points = traitlets.List(traitlets.Float()).tag(
-        sync=True
-    )  # flat list [x0,y0,z0,x1,y1,z1,...]
-    category_colors = traitlets.Dict(
+    # flat list [x0,y0,z0,x1,y1,z1,...]
+    points_t = traitlets.List(trait=traitlets.Float()).tag(sync=True)
+
+    # { column_name: [value_0, value_1, ...] } (all as strings)
+    categories_t = traitlets.Dict(
         key_trait=traitlets.Unicode(),
-        value_trait=traitlets.List(trait=traitlets.Float(), minlen=3, maxlen=3),
+        value_trait=traitlets.List(trait=traitlets.Unicode()),
     ).tag(sync=True)
-    categories = traitlets.List(trait=traitlets.Unicode()).tag(sync=True)
+
+    # {
+    #   column_name: {
+    #       category_str: [r, g, b],
+    #       ...
+    #   },
+    #   ...
+    # }
+    categories_colors_t = traitlets.Dict(
+        key_trait=traitlets.Unicode(),
+        value_trait=traitlets.Dict(
+            key_trait=traitlets.Unicode(),
+            value_trait=traitlets.List(trait=traitlets.Float(), minlen=3, maxlen=3),
+        ),
+    ).tag(sync=True)
 
     point_size = traitlets.Float(DEFAULT_POINT_SIZE).tag(sync=True)
     background = traitlets.Unicode(WHITE).tag(sync=True)
@@ -86,115 +78,112 @@ class Scatter3dWidget(anywidget.AnyWidget):
         super().__init__(**kwargs)
         self._dframe = narwhals.from_native(dframe)
 
-        self._x_col = None
-        self._y_col = None
-        self._z_col = None
-        self._x_col_idx = None
-        self._y_col_idx = None
-        self._z_col_idx = None
-        self.x_col = x_col
-        self.y_col = y_col
-        self.z_col = z_col
+        # --- validate and set axis columns ---
+        columns = self._dframe.columns
+        for axis_name, col in (("x", x_col), ("y", y_col), ("z", z_col)):
+            if col not in columns:
+                raise ValueError(
+                    f"{axis_name}_col {col!r} not found in data frame columns: {columns}"
+                )
 
-        self._categories_cols = []
-        self.categories_cols = categories_cols
-        self._categories_col = None
-        self.current_categories_col = categories_cols[0]
+        self._x_col_idx = columns.index(x_col)
+        self._y_col_idx = columns.index(y_col)
+        self._z_col_idx = columns.index(z_col)
+        self._x_col = x_col
+        self._y_col = y_col
+        self._z_col = z_col
 
-        self.set_points()
+        self._categories_cols: list[str] = []
+        self._set_categories_cols(categories_cols)
 
-    def _get_categories_cols(self):
+        self._compute_points()
+        self._compute_categories_and_colors()
+
+    def _compute_points(self) -> None:
+        xyz_cols = (self._x_col_idx, self._y_col_idx, self._z_col_idx)
+        array = self._dframe[:, xyz_cols].to_numpy().astype("float32", copy=False)
+        self.points_t = array.ravel().tolist()
+
+    def _compute_categories_and_colors(self) -> None:
+        cats_dict: dict[str, list[str]] = {}
+        colors_dict: dict[str, dict[str, list[float]]] = {}
+
+        for col in self._categories_cols:
+            series = self._dframe.get_column(col)
+            # ensure a real list of strings
+            values = [str(v) for v in series.to_list()]
+            cats_dict[col] = values
+
+            # unique values
+            different = sorted(set(values))
+            color_cycle = cycle(TAB20_COLORS_RGB)
+            col_colors: dict[str, list[float]] = {}
+            for cat in different:
+                col_colors[cat] = list(next(color_cycle))
+            colors_dict[col] = col_colors
+
+        self.categories_t = cats_dict
+        self.categories_colors_t = colors_dict
+
+    def _get_categories_cols(self) -> list[str]:
         return self._categories_cols
 
-    def _set_categories_cols(self, categories):
+    def _set_categories_cols(self, cols: list[str]) -> None:
         columns = self._dframe.columns
-        for category in self.categories:
-            if category not in columns:
-                raise ValueError("Category column {category} not found in data frame")
-        self._categories_cols = categories
+        for col in cols:
+            if col not in columns:
+                raise ValueError(
+                    f"Category column {col!r} not found in data frame columns: {columns}"
+                )
+        self._categories_cols = list(cols)
 
-    categories_cols = property(_get_categories_cols, _set_categories_cols)
+    categories_cols = property(_get_categories_cols)
 
-    def _get_categories_col(self):
-        return self._categories_col
+    @property
+    def categories(self):
+        return self.categories_t
 
-    def _set_categories_col(self, col: str):
-        if col not in self.categories_cols:
-            raise ValueError(
-                f"categories col: {col} not found in the categories columns: {self.categories_cols}"
-            )
-        self._categories_col = col
-
-    current_categories_col = property(_get_categories_col, _set_categories_col)
-
-    def _get_x_col(self):
+    def _get_x_col(self) -> str:
         return self._x_col
 
-    def _set_x_col(self, col: str):
+    def _set_x_col(self, col: str) -> None:
         columns = self._dframe.columns
         if col not in columns:
             raise ValueError(
-                f"x_col: {col} not found in the data frame columns: {self._dframe.columns}"
+                f"x_col {col!r} not found in data frame columns: {columns}"
             )
         self._x_col_idx = columns.index(col)
         self._x_col = col
+        self._compute_points()
 
     x_col = property(_get_x_col, _set_x_col)
 
-    def _get_y_col(self):
+    def _get_y_col(self) -> str:
         return self._y_col
 
-    def _set_y_col(self, col: str):
+    def _set_y_col(self, col: str) -> None:
         columns = self._dframe.columns
         if col not in columns:
             raise ValueError(
-                f"y_col: {col} not found in the data frame columns: {self._dframe.columns}"
+                f"y_col {col!r} not found in data frame columns: {columns}"
             )
         self._y_col_idx = columns.index(col)
         self._y_col = col
+        self._compute_points()
 
     y_col = property(_get_y_col, _set_y_col)
 
-    def _get_z_col(self):
+    def _get_z_col(self) -> str:
         return self._z_col
 
-    def _set_z_col(self, col: str):
+    def _set_z_col(self, col: str) -> None:
         columns = self._dframe.columns
         if col not in columns:
             raise ValueError(
-                f"x_col: {col} not found in the data frame columns: {self._dframe.columns}"
+                f"z_col {col!r} not found in data frame columns: {columns}"
             )
         self._z_col_idx = columns.index(col)
         self._z_col = col
+        self._compute_points()
 
     z_col = property(_get_z_col, _set_z_col)
-
-    def set_points(
-        self,
-    ):
-        dframe = self._dframe
-
-        xyz_cols = (self._x_col_idx, self._y_col_idx, self._z_col_idx)
-
-        array = dframe[:, xyz_cols].to_numpy().astype("float32", copy=False)
-        self.points = array.ravel().tolist()
-
-        categories = dframe.get_column(self.current_categories_col)
-
-        different_categories = sorted(set(categories))
-        color_cycle = cycle(TAB20_COLORS_RGB)
-        category_colors = {
-            category: next(color_cycle) for category in different_categories
-        }
-        self.category_colors = category_colors
-
-        categories_to_str = {}
-        for category in different_categories:
-            category_str = str(category)
-            if category in categories_to_str:
-                raise ValueError(
-                    "Two categories should not map to the same string: {category}"
-                )
-            categories_to_str[category_str] = category
-
-        self.categories = list(map(str, categories))
