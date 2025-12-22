@@ -77,10 +77,10 @@ class Scatter3dWidget(anywidget.AnyWidget):
     def __init__(
         self,
         dframe: IntoFrameT,
+        categories_cols: list[str],
         x_col: str = "x",
         y_col: str = "y",
         z_col: str = "z",
-        categories_col: str = "category",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -96,23 +96,36 @@ class Scatter3dWidget(anywidget.AnyWidget):
         self.y_col = y_col
         self.z_col = z_col
 
+        self._categories_cols = []
+        self.categories_cols = categories_cols
         self._categories_col = None
-        self.categories_col = categories_col
+        self.current_categories_col = categories_cols[0]
 
         self.set_points()
+
+    def _get_categories_cols(self):
+        return self._categories_cols
+
+    def _set_categories_cols(self, categories):
+        columns = self._dframe.columns
+        for category in self.categories:
+            if category not in columns:
+                raise ValueError("Category column {category} not found in data frame")
+        self._categories_cols = categories
+
+    categories_cols = property(_get_categories_cols, _set_categories_cols)
 
     def _get_categories_col(self):
         return self._categories_col
 
     def _set_categories_col(self, col: str):
-        columns = self._dframe.columns
-        if col not in columns:
+        if col not in self.categories_cols:
             raise ValueError(
-                f"categories col: {col} not found in the data frame columns: {self._dframe.columns}"
+                f"categories col: {col} not found in the categories columns: {self.categories_cols}"
             )
         self._categories_col = col
 
-    categories_col = property(_get_categories_col, _set_categories_col)
+    current_categories_col = property(_get_categories_col, _set_categories_col)
 
     def _get_x_col(self):
         return self._x_col
@@ -166,7 +179,7 @@ class Scatter3dWidget(anywidget.AnyWidget):
         array = dframe[:, xyz_cols].to_numpy().astype("float32", copy=False)
         self.points = array.ravel().tolist()
 
-        categories = dframe.get_column(self.categories_col)
+        categories = dframe.get_column(self.current_categories_col)
 
         different_categories = sorted(set(categories))
         color_cycle = cycle(TAB20_COLORS_RGB)

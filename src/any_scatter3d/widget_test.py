@@ -24,7 +24,7 @@ def _():
         'category': random.choices(possible_categories, k=num_points)
     })
 
-    w = Scatter3dWidget(points, categories_col="category")
+    w = Scatter3dWidget(points, categories_cols=["category"])
     w.point_size = 0.2
     w.background = "#ffffff"
 
