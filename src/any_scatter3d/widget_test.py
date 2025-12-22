@@ -12,7 +12,7 @@ def _():
     import numpy as np
     import pandas
 
-    num_points = 2000
+    num_points = 50000
 
     points = np.random.randn(num_points, 3)
     possible_categories = ['species1', 'species2', 'species3']

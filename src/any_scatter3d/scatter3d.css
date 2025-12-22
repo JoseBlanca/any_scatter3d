@@ -1,0 +1,26 @@
+.scatter3d-button {
+    padding: 4px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #eee;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: sans-serif;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.scatter3d-button:hover {
+    background: #ddd;
+}
+
+.scatter3d-button.rotate {
+    background: #eee;
+    color: black;
+    border-color: #ccc;
+}
+
+.scatter3d-button.lasso {
+    background: #337ab7;
+    color: white;
+    border-color: #2e6da4;
+}
