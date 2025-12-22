@@ -5,7 +5,10 @@ const DEF_BACKGROUND_COLOR = "#111111";
 const DEF_POINT_SIZE = 0.05;
 const LIGHT_GREY = [0.7, 0.7, 0.7];
 const DEF_POINT_COLOR = LIGHT_GREY;
-const ASPECT_RATIO = 3 / 2;
+
+const ASPECT_RATIO = 3 / 2; // width / height
+const MIN_HEIGHT = 150; // minimal usable height
+const PADDING_BOTTOM = 16; // margin from widget bottom to viewport bottom
 
 // Simple JSON-based clone: safe here (only strings / numbers)
 function clone(obj) {
@@ -107,7 +110,6 @@ function makePointerHandlers(scene, camera, renderer, getInteractionMode) {
 // Build color array for the currently selected category column
 function createPointColors(categoriesState, colorsByCol, currentCol) {
 	if (!currentCol) {
-		// no category column selected; just use default color
 		const anyCol = Object.keys(categoriesState)[0];
 		if (!anyCol) {
 			return new Float32Array(0);
@@ -212,6 +214,13 @@ function addControlBar(el, controlApi) {
 	controls.appendChild(catColLabel);
 
 	el.appendChild(controls);
+
+	return {
+		controls,
+		dispose() {
+			// placeholder for future listeners
+		},
+	};
 }
 
 function render({ model, el }) {
@@ -219,16 +228,13 @@ function render({ model, el }) {
 	el.innerHTML = "";
 	el.style.position = "relative";
 	el.style.width = "100%";
-	el.style.minHeight = "300px";
 	el.style.display = "flex";
 	el.style.flexDirection = "column";
 
 	// --- JS-side state (source of truth for categories + interaction mode) ---
 	let interactionMode = "rotate";
 
-	// categories_t: { colName: [cat0, cat1, ...] }
 	let categoriesState = clone(model.get("categories_t") || {});
-	// categories_colors_t: { colName: { catStr: [r,g,b], ... } }
 	let colorsByCol = model.get("categories_colors_t") || {};
 
 	let currentCategoryColumn = null;
@@ -243,17 +249,16 @@ function render({ model, el }) {
 	ensureCurrentCategoryColumn();
 
 	// --- Control bar ---
-	addControlBar(el, {
+	const { controls, dispose: disposeControls } = addControlBar(el, {
 		getInteractionMode: () => interactionMode,
 		setInteractionMode: (mode) => {
 			interactionMode = mode;
-			// when we implement lasso, we'll act on this
 		},
 		getCategoryColumns: () => Object.keys(categoriesState),
 		getCurrentCategoryColumn: () => currentCategoryColumn,
 		setCurrentCategoryColumn: (col) => {
 			currentCategoryColumn = col;
-			updatePoints(); // recolor points when column changes
+			updatePoints();
 		},
 	});
 
@@ -261,8 +266,6 @@ function render({ model, el }) {
 	const view = document.createElement("div");
 	view.style.position = "relative";
 	view.style.width = "100%";
-	view.style.flex = "1 1 auto";
-	view.style.minHeight = "300px";
 	el.appendChild(view);
 
 	// --- Three.js essentials ---
@@ -276,24 +279,67 @@ function render({ model, el }) {
 	const bgColor = model.get("background") || DEF_BACKGROUND_COLOR;
 	renderer.setClearColor(bgColor);
 
-	// --- Resize logic (responsive) ---
+	// --- Resize logic with aspect ratio and viewport-based vertical cap ---
 	function resizeRenderer() {
-		const containerWidth = el.clientWidth || 600;
-		const height = Math.max(containerWidth / ASPECT_RATIO, 300);
+		// width bound from host
+		const widthBound =
+			view.clientWidth ||
+			el.clientWidth ||
+			(el.parentElement ? el.parentElement.clientWidth : 0) ||
+			window.innerWidth ||
+			800;
+
+		// ideal height from aspect ratio
+		let width = widthBound;
+		let height = width / ASPECT_RATIO;
+
+		// vertical space available in viewport from top of widget
+		const rect = el.getBoundingClientRect();
+		const viewportHeight =
+			window.innerHeight || document.documentElement.clientHeight || 800;
+		let availableHeight = viewportHeight - rect.top - PADDING_BOTTOM;
+
+		if (!Number.isFinite(availableHeight) || availableHeight <= 0) {
+			availableHeight = viewportHeight * 0.5;
+		}
+
+		// clamp height to what can be shown without forcing extra scroll
+		if (height > availableHeight) {
+			const scale = availableHeight / height;
+			height = Math.max(MIN_HEIGHT, availableHeight);
+			width = width * scale;
+		}
+
+		// ensure minimum height
+		if (height < MIN_HEIGHT) {
+			const scale = MIN_HEIGHT / height;
+			height = MIN_HEIGHT;
+			width = width * scale;
+		}
+
+		// if width now exceeds bound, clamp and adjust height accordingly
+		if (width > widthBound) {
+			const scale = widthBound / width;
+			width = widthBound;
+			height = Math.max(MIN_HEIGHT, height * scale);
+		}
 
 		view.style.height = `${height}px`;
 
-		camera.aspect = containerWidth / height;
+		camera.aspect = width / height;
 		camera.updateProjectionMatrix();
 
-		renderer.setSize(containerWidth, height, false);
+		renderer.setSize(width, height, false);
 		renderer.render(scene, camera);
 	}
 
 	resizeRenderer();
 
-	const resizeObserver = new ResizeObserver(resizeRenderer);
-	resizeObserver.observe(el);
+	const resizeObserver = new ResizeObserver(() => {
+		resizeRenderer();
+	});
+	resizeObserver.observe(view);
+	window.addEventListener("resize", resizeRenderer);
 
 	// --- Lights ---
 	const light = new THREE.DirectionalLight(0xffffff, 1);
@@ -317,7 +363,6 @@ function render({ model, el }) {
 	// --- React to model changes ---
 
 	function getPointCoords() {
-		// new trait name from Python
 		return model.get("points_t") || [];
 	}
 
@@ -349,19 +394,23 @@ function render({ model, el }) {
 		renderer.render(scene, camera);
 	}
 
+	const onPointsChange = updatePoints;
+	const onCategoriesChange = () => {
+		categoriesState = clone(model.get("categories_t") || {});
+		ensureCurrentCategoryColumn();
+		updatePoints();
+	};
+	const onColorsChange = () => {
+		colorsByCol = model.get("categories_colors_t") || {};
+		updatePoints();
+	};
+	const onPointSizeChange = updatePoints;
+
 	if (model.on) {
-		// if Python ever changes the data, update JS state & rerender
-		model.on("change:points_t", updatePoints);
-		model.on("change:categories_t", () => {
-			categoriesState = clone(model.get("categories_t") || {});
-			ensureCurrentCategoryColumn();
-			updatePoints();
-		});
-		model.on("change:categories_colors_t", () => {
-			colorsByCol = model.get("categories_colors_t") || {};
-			updatePoints();
-		});
-		model.on("change:point_size", updatePoints);
+		model.on("change:points_t", onPointsChange);
+		model.on("change:categories_t", onCategoriesChange);
+		model.on("change:categories_colors_t", onColorsChange);
+		model.on("change:point_size", onPointSizeChange);
 		model.on("change:background", onBackgroundChange);
 	}
 
@@ -371,15 +420,16 @@ function render({ model, el }) {
 	// --- Cleanup ---
 	return () => {
 		resizeObserver.disconnect();
+		window.removeEventListener("resize", resizeRenderer);
 		renderer.domElement.removeEventListener("pointerdown", onPointerDown);
 		window.removeEventListener("pointerup", onPointerUp);
 		window.removeEventListener("pointermove", onPointerMove);
 
 		if (model.off) {
-			model.off("change:points_t", updatePoints);
-			model.off("change:categories_t", () => {});
-			model.off("change:categories_colors_t", () => {});
-			model.off("change:point_size", updatePoints);
+			model.off("change:points_t", onPointsChange);
+			model.off("change:categories_t", onCategoriesChange);
+			model.off("change:categories_colors_t", onColorsChange);
+			model.off("change:point_size", onPointSizeChange);
 			model.off("change:background", onBackgroundChange);
 		}
 
@@ -388,6 +438,8 @@ function render({ model, el }) {
 			pointsObjectRef.current.geometry.dispose();
 			pointsObjectRef.current.material.dispose();
 		}
+
+		disposeControls();
 
 		renderer.dispose();
 		el.innerHTML = "";

@@ -12,7 +12,7 @@ def _():
     import numpy as np
     import pandas
 
-    num_points = 50000
+    num_points = 5000
 
     points = np.random.randn(num_points, 3)
     possible_categories = ['species1', 'species2', 'species3']
@@ -21,10 +21,11 @@ def _():
         'x': np.random.randn(num_points),
         'y': np.random.randn(num_points),
         'z': np.random.randn(num_points),
-        'category': random.choices(possible_categories, k=num_points)
+        'category1': random.choices(possible_categories, k=num_points),
+        'category2': random.choices(possible_categories, k=num_points)
     })
 
-    w = Scatter3dWidget(points, categories_cols=["category"])
+    w = Scatter3dWidget(points, categories_cols=["category1", "category2"])
     w.point_size = 0.2
     w.background = "#ffffff"
 
