@@ -174,7 +174,7 @@ function addControlBar(el, controlApi) {
 
 	// --- Category column dropdown ---
 	const catColLabel = document.createElement("label");
-	catColLabel.textContent = "Category column:";
+	catColLabel.textContent = "";
 	catColLabel.style.fontSize = "13px";
 	catColLabel.style.fontFamily = "sans-serif";
 
