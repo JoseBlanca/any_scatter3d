@@ -21,11 +21,11 @@ def _():
         'x': np.random.randn(num_points),
         'y': np.random.randn(num_points),
         'z': np.random.randn(num_points),
-        'category1': random.choices(possible_categories, k=num_points),
+        'species': random.choices(possible_categories, k=num_points),
         'category2': random.choices(possible_categories, k=num_points)
     })
 
-    w = Scatter3dWidget(points, categories_cols=["category1", "category2"])
+    w = Scatter3dWidget(points, categories_cols=["species", "category2"])
     w.point_size = 0.2
     w.background = "#ffffff"
 

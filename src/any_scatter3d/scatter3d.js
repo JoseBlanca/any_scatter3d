@@ -64,50 +64,6 @@ function renderPoints(
 	renderer.render(scene, camera);
 }
 
-function makePointerHandlers(scene, camera, renderer, getInteractionMode) {
-	let isDragging = false;
-	let prevX = 0;
-	let prevY = 0;
-
-	function onPointerDown(event) {
-		const mode = getInteractionMode();
-		if (mode !== "rotate") {
-			isDragging = false;
-			// lasso handling will go here later
-			return;
-		}
-		isDragging = true;
-		prevX = event.clientX;
-		prevY = event.clientY;
-	}
-
-	function onPointerUp() {
-		isDragging = false;
-	}
-
-	function onPointerMove(event) {
-		if (!isDragging) return;
-
-		const mode = getInteractionMode();
-		if (mode !== "rotate") {
-			return;
-		}
-
-		const deltaX = event.clientX - prevX;
-		const deltaY = event.clientY - prevY;
-
-		prevX = event.clientX;
-		prevY = event.clientY;
-
-		scene.rotation.y += deltaX * ROT_SPEED;
-		scene.rotation.x += deltaY * ROT_SPEED;
-
-		renderer.render(scene, camera);
-	}
-
-	return { onPointerDown, onPointerUp, onPointerMove };
-}
-
 // Build color array for the currently selected category column
 function createPointColors(categoriesState, colorsByCol, currentCol) {
 	if (!currentCol) {
@@ -136,6 +92,26 @@ function createPointColors(categoriesState, colorsByCol, currentCol) {
 	return out;
 }
 
+// Simple point-in-polygon test in screen coordinates
+function pointInPolygon(x, y, polygon) {
+	let inside = false;
+	const n = polygon.length;
+	for (let i = 0, j = n - 1; i < n; j = i++) {
+		const xi = polygon[i].x;
+		const yi = polygon[i].y;
+		const xj = polygon[j].x;
+		const yj = polygon[j].y;
+
+		const intersect =
+			yi > y !== yj > y &&
+			x <
+				((xj - xi) * (y - yi)) / (yj - yi + 1e-12) + // avoid division by zero
+					xi;
+		if (intersect) inside = !inside;
+	}
+	return inside;
+}
+
 function addControlBar(el, controlApi) {
 	const {
 		getInteractionMode,
@@ -145,6 +121,9 @@ function addControlBar(el, controlApi) {
 		getCategoryColumns,
 		getCurrentCategoryColumn,
 		setCurrentCategoryColumn,
+		getAvailableCategories,
+		getCurrentCategoryValue,
+		setCurrentCategoryValue,
 	} = controlApi;
 
 	const controls = document.createElement("div");
@@ -234,23 +213,34 @@ function addControlBar(el, controlApi) {
 
 	controls.appendChild(topRow);
 
-	// ---------- Second row: Category column dropdown ----------
+	// ---------- Second row: Column + Value dropdown ----------
 
 	const bottomRow = document.createElement("div");
 	bottomRow.style.display = "flex";
 	bottomRow.style.alignItems = "center";
-	bottomRow.style.gap = "0.5rem";
+	bottomRow.style.gap = "0.75rem";
+	bottomRow.style.flexWrap = "wrap";
 
-	const catColLabel = document.createElement("span");
-	catColLabel.textContent = "Category column:";
-	catColLabel.style.fontSize = "13px";
-	catColLabel.style.fontFamily = "sans-serif";
+	const colLabel = document.createElement("span");
+	colLabel.textContent = "Category:";
+	colLabel.style.fontSize = "13px";
+	colLabel.style.fontFamily = "sans-serif";
 
-	const catColSelect = document.createElement("select");
-	catColSelect.style.fontSize = "13px";
+	const colSelect = document.createElement("select");
+	colSelect.style.fontSize = "13px";
 
-	catColLabel.appendChild(catColSelect);
-	bottomRow.appendChild(catColLabel);
+	const valLabel = document.createElement("span");
+	valLabel.textContent = "Value:";
+	valLabel.style.fontSize = "13px";
+	valLabel.style.fontFamily = "sans-serif";
+
+	const valSelect = document.createElement("select");
+	valSelect.style.fontSize = "13px";
+
+	bottomRow.appendChild(colLabel);
+	bottomRow.appendChild(colSelect);
+	bottomRow.appendChild(valLabel);
+	bottomRow.appendChild(valSelect);
 	controls.appendChild(bottomRow);
 
 	// ---------- Sync helpers ----------
@@ -258,11 +248,9 @@ function addControlBar(el, controlApi) {
 	function syncModeButtons() {
 		const mode = getInteractionMode();
 
-		// Mode buttons: blue = active, grey = inactive
 		styleModeButton(rotateButton, mode === "rotate");
 		styleModeButton(lassoButton, mode === "lasso");
 
-		// Show/hide lasso operations
 		if (mode === "rotate") {
 			opContainer.style.display = "none";
 		} else {
@@ -278,11 +266,11 @@ function addControlBar(el, controlApi) {
 		styleOpButton(removeButton, "#b91c1c", op === "remove");
 	}
 
-	function syncCategoryColumnOptions() {
+	function syncColumnOptions() {
 		const cols = getCategoryColumns();
 		const current = getCurrentCategoryColumn();
 
-		catColSelect.innerHTML = "";
+		colSelect.innerHTML = "";
 
 		for (const col of cols) {
 			const opt = document.createElement("option");
@@ -291,19 +279,37 @@ function addControlBar(el, controlApi) {
 			if (col === current) {
 				opt.selected = true;
 			}
-			catColSelect.appendChild(opt);
+			colSelect.appendChild(opt);
 		}
+	}
 
-		if (cols.length > 0 && !cols.includes(current)) {
-			catColSelect.value = cols[0];
-			setCurrentCategoryColumn(cols[0]);
+	function syncValueOptions() {
+		const col = getCurrentCategoryColumn();
+		const values = getAvailableCategories(col);
+		const currentVal = getCurrentCategoryValue();
+
+		valSelect.innerHTML = "";
+
+		for (const v of values) {
+			const opt = document.createElement("option");
+			opt.value = v;
+			opt.textContent = v;
+			if (v === currentVal) {
+				opt.selected = true;
+			}
+			valSelect.appendChild(opt);
 		}
+	}
+
+	function syncAllCategoryControls() {
+		syncColumnOptions();
+		syncValueOptions();
 	}
 
 	// Initial sync
 	syncModeButtons();
 	syncOperationButtons();
-	syncCategoryColumnOptions();
+	syncAllCategoryControls();
 
 	// ---------- Event listeners ----------
 
@@ -327,17 +333,25 @@ function addControlBar(el, controlApi) {
 		syncOperationButtons();
 	});
 
-	catColSelect.addEventListener("change", () => {
-		const value = catColSelect.value;
+	colSelect.addEventListener("change", () => {
+		const value = colSelect.value;
 		setCurrentCategoryColumn(value);
+		// column changed → value list and current value may change
+		syncAllCategoryControls();
+	});
+
+	valSelect.addEventListener("change", () => {
+		const value = valSelect.value;
+		setCurrentCategoryValue(value);
 	});
 
 	el.appendChild(controls);
 
 	return {
 		controls,
+		syncCategoryUI: syncAllCategoryControls,
 		dispose() {
-			// placeholder for future cleanup if needed
+			// placeholder for future cleanup
 		},
 	};
 }
@@ -358,6 +372,7 @@ function render({ model, el }) {
 	let colorsByCol = model.get("categories_colors_t") || {};
 
 	let currentCategoryColumn = null;
+	let currentCategoryValue = null;
 
 	function ensureCurrentCategoryColumn() {
 		const cols = Object.keys(categoriesState);
@@ -366,10 +381,31 @@ function render({ model, el }) {
 		}
 	}
 
-	ensureCurrentCategoryColumn();
+	function ensureCurrentCategoryValue() {
+		if (!currentCategoryColumn) {
+			currentCategoryValue = null;
+			return;
+		}
+		const colMap = colorsByCol[currentCategoryColumn] || {};
+		const values = Object.keys(colMap);
+		if (!currentCategoryValue || !values.includes(currentCategoryValue)) {
+			currentCategoryValue = values.length > 0 ? values[0] : null;
+		}
+	}
+
+	function ensureCategorySelection() {
+		ensureCurrentCategoryColumn();
+		ensureCurrentCategoryValue();
+	}
+
+	ensureCategorySelection();
 
 	// --- Control bar ---
-	const { controls, dispose: disposeControls } = addControlBar(el, {
+	const {
+		controls,
+		syncCategoryUI,
+		dispose: disposeControls,
+	} = addControlBar(el, {
 		getInteractionMode: () => interactionMode,
 		setInteractionMode: (mode) => {
 			interactionMode = mode;
@@ -382,7 +418,17 @@ function render({ model, el }) {
 		getCurrentCategoryColumn: () => currentCategoryColumn,
 		setCurrentCategoryColumn: (col) => {
 			currentCategoryColumn = col;
+			ensureCurrentCategoryValue();
 			updatePoints();
+		},
+		getAvailableCategories: (col) => {
+			if (!col) return [];
+			const colMap = colorsByCol[col] || {};
+			return Object.keys(colMap);
+		},
+		getCurrentCategoryValue: () => currentCategoryValue,
+		setCurrentCategoryValue: (v) => {
+			currentCategoryValue = v;
 		},
 	});
 
@@ -403,7 +449,23 @@ function render({ model, el }) {
 	const bgColor = model.get("background") || DEF_BACKGROUND_COLOR;
 	renderer.setClearColor(bgColor);
 
-	// --- Resize logic with aspect ratio and viewport-based vertical cap ---
+	// --- Lasso overlay canvas ---
+	const lassoCanvas = document.createElement("canvas");
+	lassoCanvas.style.position = "absolute";
+	lassoCanvas.style.left = "0";
+	lassoCanvas.style.top = "0";
+	lassoCanvas.style.pointerEvents = "none"; // let events pass through
+	view.appendChild(lassoCanvas);
+	const lassoCtx = lassoCanvas.getContext("2d");
+
+	let lastRenderWidth = 0;
+	let lastRenderHeight = 0;
+
+	function clearLassoCanvas() {
+		if (!lassoCtx) return;
+		lassoCtx.clearRect(0, 0, lassoCanvas.width, lassoCanvas.height);
+	}
+
 	function resizeRenderer() {
 		// width bound from host
 		const widthBound =
@@ -454,6 +516,17 @@ function render({ model, el }) {
 		camera.updateProjectionMatrix();
 
 		renderer.setSize(width, height, false);
+
+		// Resize lasso canvas to match
+		lassoCanvas.width = width;
+		lassoCanvas.height = height;
+		lassoCanvas.style.width = `${width}px`;
+		lassoCanvas.style.height = `${height}px`;
+		clearLassoCanvas();
+
+		lastRenderWidth = width;
+		lastRenderHeight = height;
+
 		renderer.render(scene, camera);
 	}
 
@@ -471,27 +544,14 @@ function render({ model, el }) {
 	scene.add(light);
 	scene.add(new THREE.AmbientLight(0x404040));
 
-	const { onPointerDown, onPointerUp, onPointerMove } = makePointerHandlers(
-		scene,
-		camera,
-		renderer,
-		() => interactionMode,
-	);
-
-	renderer.domElement.addEventListener("pointerdown", onPointerDown);
-	window.addEventListener("pointerup", onPointerUp);
-	window.addEventListener("pointermove", onPointerMove);
-
 	const pointsObjectRef = { current: null };
-
-	// --- React to model changes ---
 
 	function getPointCoords() {
 		return model.get("points_t") || [];
 	}
 
 	function updatePoints() {
-		ensureCurrentCategoryColumn();
+		ensureCategorySelection();
 
 		const pointCoords = getPointCoords();
 		const pointColors = createPointColors(
@@ -521,12 +581,15 @@ function render({ model, el }) {
 	const onPointsChange = updatePoints;
 	const onCategoriesChange = () => {
 		categoriesState = clone(model.get("categories_t") || {});
-		ensureCurrentCategoryColumn();
+		ensureCategorySelection();
 		updatePoints();
+		syncCategoryUI();
 	};
 	const onColorsChange = () => {
 		colorsByCol = model.get("categories_colors_t") || {};
+		ensureCategorySelection();
 		updatePoints();
+		syncCategoryUI();
 	};
 	const onPointSizeChange = updatePoints;
 
@@ -540,14 +603,201 @@ function render({ model, el }) {
 
 	// Initial render
 	updatePoints();
+	syncCategoryUI();
+
+	// --- Lasso + rotate interaction ---
+
+	let isRotating = false;
+	let lastX = 0;
+	let lastY = 0;
+
+	let isLassoing = false;
+	let lassoPoints = []; // array of {x, y} in canvas coords
+
+	function getCanvasCoords(event) {
+		const rect = view.getBoundingClientRect();
+		return {
+			x: event.clientX - rect.left,
+			y: event.clientY - rect.top,
+		};
+	}
+
+	function drawLasso() {
+		if (!lassoCtx || lassoPoints.length < 2) return;
+		clearLassoCanvas();
+		lassoCtx.beginPath();
+		lassoCtx.lineWidth = 1.5;
+		lassoCtx.strokeStyle = "rgba(255,255,255,0.9)";
+		lassoCtx.fillStyle = "rgba(37,99,235,0.15)"; // semi-transparent blue fill
+
+		lassoCtx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
+		for (let i = 1; i < lassoPoints.length; i++) {
+			lassoCtx.lineTo(lassoPoints[i].x, lassoPoints[i].y);
+		}
+		lassoCtx.closePath();
+		lassoCtx.fill();
+		lassoCtx.stroke();
+	}
+
+	function applyLassoSelection() {
+		if (!pointsObjectRef.current) return;
+		if (lassoPoints.length < 3) return;
+		if (lastRenderWidth <= 0 || lastRenderHeight <= 0) return;
+
+		const pointCoords = getPointCoords();
+		if (!Array.isArray(pointCoords) || pointCoords.length === 0) return;
+
+		const nPoints = pointCoords.length / 3;
+		const width = lastRenderWidth;
+		const height = lastRenderHeight;
+
+		const v = new THREE.Vector3();
+		const selectedIndices = [];
+
+		for (let i = 0; i < nPoints; i++) {
+			const x = pointCoords[i * 3 + 0];
+			const y = pointCoords[i * 3 + 1];
+			const z = pointCoords[i * 3 + 2];
+
+			v.set(x, y, z);
+			v.project(camera);
+
+			const sx = (v.x * 0.5 + 0.5) * width;
+			const sy = (-v.y * 0.5 + 0.5) * height;
+
+			if (pointInPolygon(sx, sy, lassoPoints)) {
+				selectedIndices.push(i);
+			}
+		}
+
+		if (selectedIndices.length === 0) {
+			return;
+		}
+
+		const colName = currentCategoryColumn;
+		const categoryValue = currentCategoryValue;
+
+		// If we don't have a column or value, do nothing
+		if (!colName || !categoryValue) {
+			return;
+		}
+
+		// --- Update categories_t according to lassoOperation ---
+		let catsObj = clone(model.get("categories_t") || {});
+		let colArr = Array.isArray(catsObj[colName])
+			? catsObj[colName].slice()
+			: [];
+		if (colArr.length < nPoints) {
+			for (let i = colArr.length; i < nPoints; i++) {
+				colArr.push("");
+			}
+		}
+
+		if (lassoOperation === "add") {
+			for (const idx of selectedIndices) {
+				colArr[idx] = categoryValue;
+			}
+		} else {
+			// "remove": only clear if it matches the current category value
+			for (const idx of selectedIndices) {
+				if (colArr[idx] === categoryValue) {
+					colArr[idx] = "";
+				}
+			}
+		}
+
+		catsObj[colName] = colArr;
+		model.set("categories_t", catsObj);
+
+		// Optional: expose debug info about the last lasso selection
+		model.set("_last_lasso", {
+			indices: selectedIndices,
+			operation: lassoOperation,
+			column: colName,
+			value: categoryValue,
+		});
+
+		if (typeof model.save_changes === "function") {
+			model.save_changes();
+		}
+	}
+
+	function onPointerDown(event) {
+		const mode = interactionMode;
+
+		if (mode === "rotate") {
+			isRotating = true;
+			lastX = event.clientX;
+			lastY = event.clientY;
+			return;
+		}
+
+		if (mode === "lasso") {
+			isLassoing = true;
+			lassoPoints = [];
+			const p = getCanvasCoords(event);
+			lassoPoints.push(p);
+			drawLasso();
+		}
+	}
+
+	function onPointerMove(event) {
+		const mode = interactionMode;
+
+		if (mode === "rotate") {
+			if (!isRotating) return;
+			const deltaX = event.clientX - lastX;
+			const deltaY = event.clientY - lastY;
+
+			lastX = event.clientX;
+			lastY = event.clientY;
+
+			scene.rotation.y += deltaX * ROT_SPEED;
+			scene.rotation.x += deltaY * ROT_SPEED;
+
+			renderer.render(scene, camera);
+			return;
+		}
+
+		if (mode === "lasso") {
+			if (!isLassoing) return;
+			const p = getCanvasCoords(event);
+			lassoPoints.push(p);
+			drawLasso();
+		}
+	}
+
+	function onPointerUp() {
+		const mode = interactionMode;
+
+		if (mode === "rotate") {
+			isRotating = false;
+			return;
+		}
+
+		if (mode === "lasso") {
+			if (isLassoing) {
+				isLassoing = false;
+				applyLassoSelection();
+				clearLassoCanvas();
+			}
+		}
+	}
+
+	renderer.domElement.addEventListener("pointerdown", onPointerDown);
+	renderer.domElement.addEventListener("pointermove", onPointerMove);
+	renderer.domElement.addEventListener("pointerup", onPointerUp);
+	renderer.domElement.addEventListener("pointerleave", onPointerUp);
 
 	// --- Cleanup ---
 	return () => {
 		resizeObserver.disconnect();
 		window.removeEventListener("resize", resizeRenderer);
+
 		renderer.domElement.removeEventListener("pointerdown", onPointerDown);
-		window.removeEventListener("pointerup", onPointerUp);
-		window.removeEventListener("pointermove", onPointerMove);
+		renderer.domElement.removeEventListener("pointermove", onPointerMove);
+		renderer.domElement.removeEventListener("pointerup", onPointerUp);
+		renderer.domElement.removeEventListener("pointerleave", onPointerUp);
 
 		if (model.off) {
 			model.off("change:points_t", onPointsChange);
