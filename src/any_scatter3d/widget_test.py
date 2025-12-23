@@ -15,17 +15,18 @@ def _():
     num_points = 5000
 
     points = np.random.randn(num_points, 3)
-    possible_categories = ['species1', 'species2', 'species3']
+    possible_species = ['species1', 'species2', 'species3']
+    possible_sizes = ['small', 'medium', 'big']
 
     points = pandas.DataFrame({
         'x': np.random.randn(num_points),
         'y': np.random.randn(num_points),
         'z': np.random.randn(num_points),
-        'species': random.choices(possible_categories, k=num_points),
-        'category2': random.choices(possible_categories, k=num_points)
+        'species': random.choices(possible_species, k=num_points),
+        'sizes': random.choices(possible_sizes, k=num_points)
     })
 
-    w = Scatter3dWidget(points, categories_cols=["species", "category2"])
+    w = Scatter3dWidget(points, categories_cols=["species", "sizes"])
     w.point_size = 0.2
     w.background = "#ffffff"
 
