@@ -1,0 +1,1 @@
+{"version":3,"file":"scatter3d.js","sources":["../../../frontend/src/index.ts"],"sourcesContent":["export function render() {\n\tconsole.log(\"scatter3d: TS build OK\");\n}\n"],"names":["render"],"mappings":"AAAO,SAASA,IAAS;AACxB,UAAQ,IAAI,wBAAwB;AACrC;"}

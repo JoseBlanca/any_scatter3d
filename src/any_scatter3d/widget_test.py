@@ -12,7 +12,7 @@ def _():
     import numpy as np
     import pandas
 
-    num_points = 5000
+    num_points = 50000
 
     points = np.random.randn(num_points, 3)
     possible_species = ['species1', 'species2', 'species3']
@@ -27,7 +27,7 @@ def _():
     })
 
     w = Scatter3dWidget(points, categories_cols=["species", "sizes"])
-    w.point_size = 0.2
+    w.point_size = 0.1
     w.background = "#ffffff"
 
     w
