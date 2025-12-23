@@ -180,22 +180,17 @@ function addControlBar(el, controlApi) {
 	const lassoButton = document.createElement("button");
 	lassoButton.textContent = "Lasso";
 
-	// Operation: + Add | – Remove (only visible in lasso mode)
+	// Operation: Add | Remove (only visible in lasso mode)
 	const opContainer = document.createElement("div");
 	opContainer.style.display = "none"; // hidden in rotate mode
 	opContainer.style.alignItems = "center";
 	opContainer.style.gap = "0.25rem";
 
-	const opLabel = document.createElement("span");
-	opLabel.textContent = "Operation:";
-	opLabel.style.fontSize = "13px";
-	opLabel.style.fontFamily = "sans-serif";
-
 	const addButton = document.createElement("button");
-	addButton.textContent = "+ Add";
+	addButton.textContent = "Add";
 
 	const removeButton = document.createElement("button");
-	removeButton.textContent = "– Remove";
+	removeButton.textContent = "Remove";
 
 	function styleOpButton(btn, activeColor, isActive) {
 		btn.style.padding = "2px 8px";
@@ -212,23 +207,16 @@ function addControlBar(el, controlApi) {
 		}
 	}
 
-	opContainer.appendChild(opLabel);
+	const categoryValueSelect = document.createElement("select");
+	categoryValueSelect.style.fontSize = "13px";
+
 	opContainer.appendChild(addButton);
 	opContainer.appendChild(removeButton);
-
-	const valLabel = document.createElement("span");
-	valLabel.textContent = "Value:";
-	valLabel.style.fontSize = "13px";
-	valLabel.style.fontFamily = "sans-serif";
-
-	const valSelect = document.createElement("select");
-	valSelect.style.fontSize = "13px";
+	opContainer.appendChild(categoryValueSelect);
 
 	bottomRow.appendChild(rotateButton);
 	bottomRow.appendChild(lassoButton);
 	bottomRow.appendChild(opContainer);
-	bottomRow.appendChild(valLabel);
-	bottomRow.appendChild(valSelect);
 
 	controls.appendChild(bottomRow);
 
@@ -277,7 +265,7 @@ function addControlBar(el, controlApi) {
 		const values = getAvailableCategories(col);
 		const currentVal = getCurrentCategoryValue();
 
-		valSelect.innerHTML = "";
+		categoryValueSelect.innerHTML = "";
 
 		for (const v of values) {
 			const opt = document.createElement("option");
@@ -286,7 +274,7 @@ function addControlBar(el, controlApi) {
 			if (v === currentVal) {
 				opt.selected = true;
 			}
-			valSelect.appendChild(opt);
+			categoryValueSelect.appendChild(opt);
 		}
 	}
 
@@ -329,8 +317,8 @@ function addControlBar(el, controlApi) {
 		syncAllCategoryControls();
 	});
 
-	valSelect.addEventListener("change", () => {
-		const value = valSelect.value;
+	categoryValueSelect.addEventListener("change", () => {
+		const value = categoryValueSelect.value;
 		setCurrentCategoryValue(value);
 	});
 
