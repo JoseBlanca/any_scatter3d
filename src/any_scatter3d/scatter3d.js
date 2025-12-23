@@ -132,7 +132,7 @@ function addControlBar(el, controlApi) {
 	controls.style.gap = "0.25rem";
 	controls.style.marginBottom = "0.5rem";
 
-	// ---------- Top row: Mode + Operation ----------
+	// ---------- Top row ----------
 
 	const topRow = document.createElement("div");
 	topRow.style.display = "flex";
@@ -140,12 +140,22 @@ function addControlBar(el, controlApi) {
 	topRow.style.gap = "0.5rem";
 	topRow.style.alignItems = "center";
 
-	// Mode: Rotate | Lasso
-	const modeLabel = document.createElement("span");
-	modeLabel.textContent = "Mode:";
-	modeLabel.style.fontSize = "13px";
-	modeLabel.style.fontFamily = "sans-serif";
+	const colSelect = document.createElement("select");
+	colSelect.style.fontSize = "13px";
 
+	topRow.appendChild(colSelect);
+
+	controls.appendChild(topRow);
+
+	// ---------- Second row: Column + Value dropdown ----------
+
+	const bottomRow = document.createElement("div");
+	bottomRow.style.display = "flex";
+	bottomRow.style.alignItems = "center";
+	bottomRow.style.gap = "0.75rem";
+	bottomRow.style.flexWrap = "wrap";
+
+	// Mode: Rotate | Lasso
 	function styleModeButton(btn, isActive) {
 		btn.style.padding = "2px 8px";
 		btn.style.borderRadius = "4px";
@@ -206,29 +216,6 @@ function addControlBar(el, controlApi) {
 	opContainer.appendChild(addButton);
 	opContainer.appendChild(removeButton);
 
-	topRow.appendChild(modeLabel);
-	topRow.appendChild(rotateButton);
-	topRow.appendChild(lassoButton);
-	topRow.appendChild(opContainer);
-
-	controls.appendChild(topRow);
-
-	// ---------- Second row: Column + Value dropdown ----------
-
-	const bottomRow = document.createElement("div");
-	bottomRow.style.display = "flex";
-	bottomRow.style.alignItems = "center";
-	bottomRow.style.gap = "0.75rem";
-	bottomRow.style.flexWrap = "wrap";
-
-	const colLabel = document.createElement("span");
-	colLabel.textContent = "Category:";
-	colLabel.style.fontSize = "13px";
-	colLabel.style.fontFamily = "sans-serif";
-
-	const colSelect = document.createElement("select");
-	colSelect.style.fontSize = "13px";
-
 	const valLabel = document.createElement("span");
 	valLabel.textContent = "Value:";
 	valLabel.style.fontSize = "13px";
@@ -237,10 +224,12 @@ function addControlBar(el, controlApi) {
 	const valSelect = document.createElement("select");
 	valSelect.style.fontSize = "13px";
 
-	bottomRow.appendChild(colLabel);
-	bottomRow.appendChild(colSelect);
+	bottomRow.appendChild(rotateButton);
+	bottomRow.appendChild(lassoButton);
+	bottomRow.appendChild(opContainer);
 	bottomRow.appendChild(valLabel);
 	bottomRow.appendChild(valSelect);
+
 	controls.appendChild(bottomRow);
 
 	// ---------- Sync helpers ----------
