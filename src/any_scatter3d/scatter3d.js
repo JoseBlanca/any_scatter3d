@@ -1,7 +1,21 @@
 import * as THREE from "https://esm.sh/three@0.182.0";
 
+const DEF_BACKGROUND_COLOR = "#ffffffff";
+const ACTIVE_BUTTON_BACKGROUND_COLOR = "#2563eb";
+const ACTIVE_BUTTON_FONT_COLOR = "#fff";
+const INACTIVE_BUTTON_BACKGROUND_COLOR = "#fff";
+const INACTIVE_BUTTON_FONT_COLOR = "#ddd";
+const ACTIVE_BUTTON_BORDER = "1px solid #444";
+const INACTIVE_BUTTON_BORDER = "1px solid #aaa";
+const ACTIVE_LASSO_BACKGROUND_COLOR = "#b91c1c";
+const ACTIVE_LASSO_BUTTON_FONT_COLOR = "#fff";
+const BUTTON_STYLE = Object.freeze({
+	ACTIVE: "active",
+	INACTIVE: "inactive",
+	ACTIVE_LASSO_REMOVE: "active_lasso_remove",
+});
+
 const ROT_SPEED = 0.005;
-const DEF_BACKGROUND_COLOR = "#111111";
 const DEF_POINT_SIZE = 0.05;
 const LIGHT_GREY = [0.7, 0.7, 0.7];
 const DEF_POINT_COLOR = LIGHT_GREY;
@@ -155,22 +169,32 @@ function addControlBar(el, controlApi) {
 	bottomRow.style.gap = "0.75rem";
 	bottomRow.style.flexWrap = "wrap";
 
-	// Mode: Rotate | Lasso
-	function styleModeButton(btn, isActive) {
+	function setStyleButton(btn, btnStyle) {
 		btn.style.padding = "2px 8px";
 		btn.style.borderRadius = "4px";
-		btn.style.border = "1px solid #444";
 		btn.style.cursor = "pointer";
 		btn.style.fontSize = "12px";
 
-		if (isActive) {
-			// Active state: blue (matches Add)
-			btn.style.background = "#2563eb"; // blue
-			btn.style.color = "#fff";
-		} else {
-			// Inactive state: grey
-			btn.style.background = "#222"; // dark grey
-			btn.style.color = "#aaa";
+		switch (btnStyle) {
+			case BUTTON_STYLE.ACTIVE:
+				btn.style.background = ACTIVE_BUTTON_BACKGROUND_COLOR;
+				btn.style.color = ACTIVE_BUTTON_FONT_COLOR;
+				btn.style.border = ACTIVE_BUTTON_BORDER;
+				break;
+			case BUTTON_STYLE.INACTIVE:
+				btn.style.background = INACTIVE_BUTTON_FONT_COLOR;
+				btn.style.color = INACTIVE_BUTTON_BACKGROUND_COLOR;
+				btn.style.border = INACTIVE_BUTTON_BORDER;
+				break;
+
+			case BUTTON_STYLE.ACTIVE_LASSO_REMOVE:
+				btn.style.background = ACTIVE_LASSO_BACKGROUND_COLOR;
+				btn.style.color = ACTIVE_LASSO_BUTTON_FONT_COLOR;
+				btn.style.border = ACTIVE_BUTTON_BORDER;
+				break;
+
+			default:
+				throw new Error(`Unknown BUTTON_STYLE: ${style}`);
 		}
 	}
 
@@ -192,21 +216,6 @@ function addControlBar(el, controlApi) {
 	const removeButton = document.createElement("button");
 	removeButton.textContent = "Remove";
 
-	function styleOpButton(btn, activeColor, isActive) {
-		btn.style.padding = "2px 8px";
-		btn.style.borderRadius = "4px";
-		btn.style.border = "1px solid #444";
-		btn.style.cursor = "pointer";
-		btn.style.fontSize = "12px";
-		if (isActive) {
-			btn.style.background = activeColor;
-			btn.style.color = "#fff";
-		} else {
-			btn.style.background = "#222";
-			btn.style.color = "#aaa";
-		}
-	}
-
 	const categoryValueSelect = document.createElement("select");
 	categoryValueSelect.style.fontSize = "13px";
 
@@ -225,8 +234,13 @@ function addControlBar(el, controlApi) {
 	function syncModeButtons() {
 		const mode = getInteractionMode();
 
-		styleModeButton(rotateButton, mode === "rotate");
-		styleModeButton(lassoButton, mode === "lasso");
+		if (mode === "rotate") {
+			setStyleButton(rotateButton, BUTTON_STYLE.ACTIVE);
+			setStyleButton(lassoButton, BUTTON_STYLE.INACTIVE);
+		} else {
+			setStyleButton(rotateButton, BUTTON_STYLE.INACTIVE);
+			setStyleButton(lassoButton, BUTTON_STYLE.ACTIVE);
+		}
 
 		if (mode === "rotate") {
 			opContainer.style.display = "none";
@@ -239,8 +253,13 @@ function addControlBar(el, controlApi) {
 		const op = getLassoOperation();
 
 		// add = blue, remove = red
-		styleOpButton(addButton, "#2563eb", op === "add");
-		styleOpButton(removeButton, "#b91c1c", op === "remove");
+		if (op === "add") {
+			setStyleButton(addButton, BUTTON_STYLE.ACTIVE);
+			setStyleButton(removeButton, BUTTON_STYLE.INACTIVE);
+		} else {
+			setStyleButton(addButton, BUTTON_STYLE.INACTIVE);
+			setStyleButton(removeButton, BUTTON_STYLE.ACTIVE_LASSO_REMOVE);
+		}
 	}
 
 	function syncColumnOptions() {
