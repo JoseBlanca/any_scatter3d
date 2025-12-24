@@ -7,7 +7,7 @@ app = marimo.App(width="medium")
 @app.cell
 def _():
     import random
-    from any_scatter3d.scatter3d import Scatter3dWidget
+    from any_scatter3d import Scatter3dWidget
 
     import numpy as np
     import pandas
@@ -22,15 +22,14 @@ def _():
         'x': np.random.randn(num_points),
         'y': np.random.randn(num_points),
         'z': np.random.randn(num_points),
-        'species': random.choices(possible_species, k=num_points),
-        'sizes': random.choices(possible_sizes, k=num_points)
+        'cat_species': random.choices(possible_species, k=num_points),
+        'cat_sizes': random.choices(possible_sizes, k=num_points)
     })
 
-    w = Scatter3dWidget(points, categories_cols=["species", "sizes"])
-    w.point_size = 0.1
-    w.background = "#ffffff"
-
+    w = Scatter3dWidget()
+    w.count = 100
     w
+
     return
 
 
