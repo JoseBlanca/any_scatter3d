@@ -3,7 +3,6 @@ import {
 	createWidgetRoot,
 	observeSize,
 	createCanvas,
-	renderHello,
 	pointerInfoFromEvent,
 	get2dContext,
 } from "./view";
@@ -29,29 +28,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 
 	const { root, toolbar, canvasHost } = createWidgetRoot(el);
 
-	// Toolbar demo
-	const btn = document.createElement("button");
-	btn.textContent = "Increment counts";
-	const label = document.createElement("div");
-	toolbar.appendChild(btn);
-	toolbar.appendChild(label);
-
-	const update = () => renderHello(model, label);
-	model.on("change", update);
-	update();
-
 	const abortController = new AbortController();
-
-	btn.addEventListener(
-		"click",
-		() => {
-			const current = model.get("count");
-			const n = typeof current === "number" ? current : 0;
-			model.set("count", n + 1);
-			model.save_changes();
-		},
-		{ signal: abortController.signal },
-	);
 
 	// Canvas + interaction state
 	const { canvas, resizeCanvas } = createCanvas(canvasHost);

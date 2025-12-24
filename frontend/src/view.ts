@@ -120,11 +120,3 @@ export function createCanvas(canvasHost: HTMLElement) {
 	}
 	return { canvas, resizeCanvas };
 }
-
-export function renderHello(model: WidgetModel, label: HTMLElement) {
-	const msg = model.get("message");
-	const count = model.get("count");
-	const msgStr = typeof msg === "string" ? msg : "(message not string)";
-	const countNum = typeof count === "number" ? count : NaN;
-	label.textContent = `${msgStr} | count = ${Number.isFinite(countNum) ? countNum : "(not a number)"}`;
-}
