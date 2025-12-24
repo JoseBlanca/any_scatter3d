@@ -1,5 +1,12 @@
 import type { WidgetModel } from "./model";
-import { createWidgetRoot, observeSize, renderHello } from "./view";
+import {
+	createWidgetRoot,
+	observeSize,
+	createCanvas,
+	renderHello,
+} from "./view";
+
+const RESIZE_THRESHOLD_PX = 2;
 
 export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 	let cleanupPrev = (el as any).__any_scatter3d_cleanup as
@@ -7,7 +14,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		| (() => void);
 	cleanupPrev?.();
 
-	const { toolbar, canvasHost } = createWidgetRoot(el);
+	const { root, toolbar, canvasHost } = createWidgetRoot(el);
 
 	const btn = document.createElement("button");
 	btn.textContent = "Increment counts";
@@ -30,15 +37,27 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		{ signal: abortController.signal },
 	);
 
+	const { canvas, resizeCanvas } = createCanvas(canvasHost);
+	const context = canvas.getContext("2d");
+
 	let lastWidth = 0;
 	let lastHeight = 0;
 
-	const stopObserving = observeSize(canvasHost, (width, height) => {
-		if (width == lastWidth && height == lastHeight) return;
-		lastWidth = width;
-		lastHeight = height;
+	const stopObserving = observeSize(canvasHost, (canvasWidth, canvasHeight) => {
+		const roundedWidth = Math.round(canvasWidth);
+		const roundedHeight = Math.round(canvasHeight);
 
-		console.log("size", width, height);
+		if (
+			Math.abs(roundedWidth - lastWidth) < RESIZE_THRESHOLD_PX &&
+			Math.abs(roundedHeight - lastHeight) < RESIZE_THRESHOLD_PX
+		) {
+			return;
+		}
+
+		lastWidth = roundedWidth;
+		lastHeight = roundedHeight;
+
+		const {} = resizeCanvas(roundedWidth, roundedHeight);
 	});
 
 	model.on("change", update);
@@ -47,6 +66,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 	const cleanup = () => {
 		abortController.abort();
 		stopObserving();
+		canvas.remove();
 	};
 
 	(el as any).__any_scatter3d_cleanup = cleanup;
