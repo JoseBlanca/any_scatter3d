@@ -12,7 +12,7 @@ export function createHelloView(el: HTMLElement) {
 
 	const label = document.createElement("div");
 	const btn = document.createElement("button");
-	btn.textContent = "Increment count";
+	btn.textContent = "Increment counts";
 
 	el.appendChild(btn);
 	el.appendChild(label);
