@@ -26,10 +26,9 @@ def _():
         'cat_sizes': random.choices(possible_sizes, k=num_points)
     })
 
-    w = Scatter3dWidget()
+    w = Scatter3dWidget(dframe=points, categories_cols=["cat_species", "cat_sizes"])
     w.count = 100
     w
-
     return
 
 
