@@ -44,14 +44,6 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 	const { canvas, resizeCanvas } = createOverlayCanvas(canvasHost);
 	const ctx = get2dContext(canvas);
 
-	model.on("change:points_t", () => {
-		three.setPointsFromModel();
-	});
-
-	model.on("change:point_size_t", () => three.setPointSizeFromModel());
-	model.on("change:points_dtype_t", () => three.setPointsFromModel());
-	model.on("change:points_stride_t", () => three.setPointsFromModel());
-
 	const state = createInteractionState();
 
 	const r = canvasHost.getBoundingClientRect();
@@ -143,6 +135,9 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 	type LabelsForCategories = Record<string, string[]>;
 	const labelsForCategories =
 		(model.get("labels_for_categories_t") as LabelsForCategories) ?? {};
+	function getLabelsForCategories(): LabelsForCategories {
+		return (model.get("labels_for_categories_t") as LabelsForCategories) ?? {};
+	}
 
 	function populateCategorySelect(
 		select: HTMLSelectElement,
@@ -218,7 +213,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 	bar.categorySelect.addEventListener(
 		"change",
 		() => {
-			const labelsForCategories = model.get("labels_for_categories_t") ?? {};
+			const labelsForCategories = getLabelsForCategories();
 			populateValueSelect(
 				bar.valueSelect,
 				bar.categorySelect.value,
@@ -228,8 +223,18 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		{ signal: abortController.signal },
 	);
 
-	model.on("change:labels_for_categories_t", refreshCategoriesUI);
 	refreshCategoriesUI();
+
+	const onPointsChange = () => three.setPointsFromModel();
+	const onPointSizeChange = () => three.setPointSizeFromModel();
+	const onPointsDtypeChange = () => three.setPointsFromModel();
+	const onPointsStrideChange = () => three.setPointsFromModel();
+	const onLabelsChange = () => refreshCategoriesUI();
+	model.on("change:points_t", onPointsChange);
+	model.on("change:point_size_t", onPointSizeChange);
+	model.on("change:points_dtype_t", onPointsDtypeChange);
+	model.on("change:points_stride_t", onPointsStrideChange);
+	model.on("change:labels_for_categories_t", onLabelsChange);
 
 	// Make root focusable so Enter/Escape works
 	root.tabIndex = 0;
@@ -336,6 +341,13 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 
 	const cleanup = () => {
 		abortController.abort();
+
+		model.off("change:points_t", onPointsChange);
+		model.off("change:point_size_t", onPointSizeChange);
+		model.off("change:points_dtype_t", onPointsDtypeChange);
+		model.off("change:points_stride_t", onPointsStrideChange);
+		model.off("change:labels_for_categories_t", onLabelsChange);
+
 		stopObserving();
 		cancelAnimationFrame(rafId);
 		three.dispose();
