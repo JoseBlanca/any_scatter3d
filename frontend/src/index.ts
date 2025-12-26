@@ -139,21 +139,97 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		},
 		{ signal: abortController.signal },
 	);
-	bar.categorySelect.innerHTML = "";
-	for (const name of ["country", "species"]) {
-		const opt = document.createElement("option");
-		opt.value = name;
-		opt.textContent = name;
-		bar.categorySelect.appendChild(opt);
+
+	type LabelsForCategories = Record<string, string[]>;
+	const labelsForCategories =
+		(model.get("labels_for_categories_t") as LabelsForCategories) ?? {};
+
+	function populateCategorySelect(
+		select: HTMLSelectElement,
+		labelsForCategories: Record<string, string[]>,
+		preferred?: string,
+	) {
+		const categories = Object.keys(labelsForCategories).sort();
+
+		select.innerHTML = "";
+		for (const category of categories) {
+			const opt = document.createElement("option");
+			opt.value = category;
+			opt.textContent = category;
+			select.appendChild(opt);
+		}
+
+		// Pick a valid selection
+		if (categories.length === 0) return;
+
+		const wanted =
+			preferred && categories.includes(preferred) ? preferred : categories[0];
+		select.value = wanted;
 	}
 
-	bar.valueSelect.innerHTML = "";
-	for (const v of ["Spain", "Italy"]) {
-		const opt = document.createElement("option");
-		opt.value = v;
-		opt.textContent = v;
-		bar.valueSelect.appendChild(opt);
+	function populateValueSelect(
+		select: HTMLSelectElement,
+		category: string,
+		labelsForCategories: Record<string, string[]>,
+		preferredCode?: string,
+	) {
+		select.innerHTML = "";
+		const labels = labelsForCategories[category];
+		if (!labels) return;
+
+		for (let i = 2; i < labels.length; i++) {
+			const opt = document.createElement("option");
+			opt.value = String(i); // code
+			opt.textContent = labels[i]; // label
+			select.appendChild(opt);
+		}
+
+		// Keep previous value if still valid; otherwise default to first option
+		if (select.options.length === 0) return;
+		if (
+			preferredCode &&
+			Array.from(select.options).some((o) => o.value === preferredCode)
+		) {
+			select.value = preferredCode;
+		} else {
+			select.selectedIndex = 0;
+		}
 	}
+
+	function refreshCategoriesUI() {
+		const labelsForCategories =
+			(model.get("labels_for_categories_t") as Record<string, string[]>) ?? {};
+
+		const prevCategory = bar.categorySelect.value;
+		const prevValueCode = bar.valueSelect.value;
+
+		populateCategorySelect(
+			bar.categorySelect,
+			labelsForCategories,
+			prevCategory,
+		);
+		populateValueSelect(
+			bar.valueSelect,
+			bar.categorySelect.value,
+			labelsForCategories,
+			prevValueCode,
+		);
+	}
+	bar.categorySelect.addEventListener(
+		"change",
+		() => {
+			const labelsForCategories = model.get("labels_for_categories_t") ?? {};
+			populateValueSelect(
+				bar.valueSelect,
+				bar.categorySelect.value,
+				labelsForCategories,
+			);
+		},
+		{ signal: abortController.signal },
+	);
+
+	model.on("change:labels_for_categories_t", refreshCategoriesUI);
+	refreshCategoriesUI();
 
 	// Make root focusable so Enter/Escape works
 	root.tabIndex = 0;
