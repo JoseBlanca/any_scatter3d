@@ -15,9 +15,12 @@ import {
 	cancelLasso,
 	commitLasso,
 	drawOverlay,
+	LassoPoint,
+	InteractionState,
 } from "./interaction";
 import { createControlBar, renderControlBar, DEFAULT_UI_CONFIG } from "./ui";
 import { createThreeScene } from "./three_scene";
+import { bytesToUint8Array } from "./binary";
 
 const RESIZE_THRESHOLD_PX = 2;
 
@@ -247,6 +250,95 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 
 	const category = bar.categorySelect.value;
 
+	function applyCommittedLasso(args: {
+		model: import("./model").WidgetModel;
+		three: import("./three_scene").ThreeScene;
+		bar: any; // your UI object with dropdowns
+		state: InteractionState;
+		polygon: LassoPoint[];
+	}) {
+		const { model, three, bar, state, polygon } = args;
+
+		// Column (e.g. "country") and label (e.g. "Spain")
+		const categoryCol = bar.categorySelect.value;
+		const codeStr = bar.valueSelect.value;
+		if (!categoryCol || !codeStr) return;
+
+		const codedAll = (model.get("coded_categories_t") ?? {}) as Record<
+			string,
+			unknown
+		>;
+		const labelsAll = (model.get("labels_for_categories_t") ?? {}) as Record<
+			string,
+			string[]
+		>;
+		const palettesAll = (model.get("categories_colors_t") ?? {}) as Record<
+			string,
+			number[][]
+		>;
+
+		const codesBytesRaw = codedAll[categoryCol];
+		const labels = labelsAll[categoryCol];
+		const colorsForCodes = palettesAll[categoryCol];
+
+		if (!codesBytesRaw || !labels || !colorsForCodes) return;
+
+		// You are currently interpreting codes as Uint32Array in three_scene.ts:
+		//   const codes = new Uint32Array(bytesToUint8Array(codesBytes).buffer);
+		// so we must mutate as Uint32, not Uint8.
+		const u8 = bytesToUint8Array(codesBytesRaw);
+		if (u8.byteLength % 4 !== 0) return;
+
+		const codes = new Uint32Array(u8.buffer, u8.byteOffset, u8.byteLength / 4);
+
+		const targetCode = Number.parseInt(codeStr, 10);
+		if (!Number.isFinite(targetCode)) return;
+
+		const unassignedCode = 0;
+
+		// polygon points are already in NDC in your InteractionState
+		const polyNdc = polygon.map((p) => ({
+			x: p.normDevCoordX,
+			y: p.normDevCoordY,
+		}));
+
+		const indices = three.selectIndicesInLasso(polyNdc);
+		if (indices.length === 0) return;
+
+		let changed = false;
+		const op = state.mode.kind === "lasso" ? state.mode.operation : null;
+		if (!op) return;
+
+		if (op === "add") {
+			for (const idx of indices) {
+				if (codes[idx] !== targetCode) {
+					codes[idx] = targetCode;
+					changed = true;
+				}
+			}
+		} else {
+			for (const idx of indices) {
+				if (codes[idx] === targetCode) {
+					codes[idx] = unassignedCode;
+					changed = true;
+				}
+			}
+		}
+
+		if (!changed) return;
+
+		// Recolor immediately (local)
+		three.setColorsFromCategory(u8, colorsForCodes);
+
+		// Commit to Python once per lasso end.
+		// Clone the dict AND clone the bytes to ensure change detection + safe serialization.
+		const u8copy = new Uint8Array(u8.byteLength);
+		u8copy.set(u8);
+
+		model.set("coded_categories_t", { ...codedAll, [categoryCol]: u8copy });
+		model.save_changes();
+	}
+
 	const onPointsChange = () => three.setPointsFromModel();
 	const onPointSizeChange = () => three.setPointSizeFromModel();
 	const onPointsDtypeChange = () => three.setPointsFromModel();
@@ -324,7 +416,10 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 				syncUiFromState();
 				e.preventDefault();
 			} else if (e.key === "Enter") {
-				commitLasso(state);
+				const polygon = commitLasso(state);
+				if (polygon) {
+					applyCommittedLasso({ model, three, bar, state, polygon });
+				}
 				syncUiFromState();
 				e.preventDefault();
 			}

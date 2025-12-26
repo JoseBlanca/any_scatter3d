@@ -13,9 +13,11 @@ export type ThreeScene = {
 		codesBytes: unknown,
 		colorsForCodes: number[][],
 	) => void;
+	selectIndicesInLasso: (polyNdc: { x: number; y: number }[]) => number[];
 	render: () => void;
 	dispose: () => void;
 };
+type Point2D = { x: number; y: number };
 
 function positionsFromPackedBytes(
 	pointsBytes: unknown,
@@ -57,6 +59,24 @@ function positionsFromPackedBytes(
 
 	if (f32.length % 3 !== 0) throw new Error("points not divisible by 3");
 	return f32;
+}
+
+function pointInPolygon(p: Point2D, poly: readonly Point2D[]): boolean {
+	// Ray casting algorithm
+	let inside = false;
+	for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+		const xi = poly[i].x;
+		const yi = poly[i].y;
+		const xj = poly[j].x;
+		const yj = poly[j].y;
+
+		const intersect =
+			yi > p.y !== yj > p.y &&
+			p.x < ((xj - xi) * (p.y - yi)) / (yj - yi + 0.0) + xi;
+
+		if (intersect) inside = !inside;
+	}
+	return inside;
 }
 
 export function createThreeScene(
@@ -188,6 +208,33 @@ export function createThreeScene(
 		camera.updateProjectionMatrix();
 	}
 
+	const tmpV = new THREE.Vector3();
+
+	function selectIndicesInLasso(polyNdc: Point2D[]): number[] {
+		if (polyNdc.length < 3) return [];
+
+		camera.updateMatrixWorld(true);
+
+		const pos = geom.getAttribute("position") as THREE.BufferAttribute;
+		const arr = pos.array as Float32Array;
+		const out: number[] = [];
+
+		// arr layout: [x0,y0,z0,x1,y1,z1,...]
+		for (let i = 0; i < arr.length; i += 3) {
+			tmpV.set(arr[i], arr[i + 1], arr[i + 2]);
+			tmpV.project(camera); // now in NDC
+
+			// skip clipped points (behind camera / outside clip volume)
+			if (tmpV.z < -1 || tmpV.z > 1) continue;
+
+			if (pointInPolygon({ x: tmpV.x, y: tmpV.y }, polyNdc)) {
+				out.push(i / 3);
+			}
+		}
+
+		return out;
+	}
+
 	function render() {
 		controls.update();
 		renderer.render(scene, camera);
@@ -209,6 +256,7 @@ export function createThreeScene(
 		setPointsFromModel,
 		setPointSizeFromModel,
 		setColorsFromCategory,
+		selectIndicesInLasso,
 		render,
 		dispose,
 	};
