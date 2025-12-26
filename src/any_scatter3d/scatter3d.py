@@ -16,6 +16,7 @@ PROD_ESM = JAVASCRIPT_DIR / "scatter3d.js"
 DEF_DEV_ESM = "http://127.0.0.1:5173/src/index.ts"
 
 FLOAT_TYPE = "<f4"
+FLOAT_TYPE_TS = "float32"
 CATEGORY_CODES_DTYPE = "<u4"  # uint32 little-endian
 UNSET_COLOR = [0.6, 0.6, 0.6]
 
@@ -58,10 +59,9 @@ def _is_nan(value: object) -> bool:
 
 class Scatter3dWidget(anywidget.AnyWidget):
     _esm = _esm_source()
-
     # packed float32 xyzxyz...
     points_t = traitlets.Bytes(default_value=b"").tag(sync=True)
-    points_dtype_t = traitlets.Unicode(FLOAT_TYPE).tag(sync=True)
+    points_dtype_t = traitlets.Unicode(FLOAT_TYPE_TS).tag(sync=True)
     points_stride_t = traitlets.Int(3).tag(sync=True)
 
     # For a given category column `col` and point index `i`:
@@ -143,7 +143,7 @@ class Scatter3dWidget(anywidget.AnyWidget):
         ),
     ).tag(sync=True)
 
-    point_size = traitlets.Float(DEFAULT_POINT_SIZE).tag(sync=True)
+    point_size_t = traitlets.Float(DEFAULT_POINT_SIZE).tag(sync=True)
     background = traitlets.Unicode(WHITE).tag(sync=True)
 
     def __init__(

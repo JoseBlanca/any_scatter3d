@@ -1,6 +1,7 @@
 import type { WidgetModel } from "./model";
 
-const MIN_CANVAS_SIZE = "300px";
+const MIN_WIDGET_HEIGHT = "300px";
+const MIN_PLOT_HEIGHT = "240px";
 
 export type PointerInfo = {
 	cssX: number;
@@ -38,7 +39,7 @@ export function createWidgetRoot(el: HTMLElement) {
 	el.innerHTML = "";
 
 	el.style.height = "100%";
-	el.style.minHeight = MIN_CANVAS_SIZE;
+	el.style.minHeight = MIN_WIDGET_HEIGHT;
 
 	const root = document.createElement("div");
 	root.style.display = "flex";
@@ -46,6 +47,8 @@ export function createWidgetRoot(el: HTMLElement) {
 	root.style.gap = "12px";
 	root.style.padding = "12px";
 	root.style.fontFamily = "system-ui, sans-serif";
+	root.style.height = "100%";
+	root.style.minHeight = MIN_WIDGET_HEIGHT;
 
 	root.style.height = "100%";
 	root.style.boxSizing = "border-box"; // padding counted inside height
@@ -60,9 +63,12 @@ export function createWidgetRoot(el: HTMLElement) {
 	canvasHost.style.width = "100%";
 	canvasHost.style.border = "1px solid #ddd";
 	canvasHost.style.borderRadius = "8px";
-	canvasHost.style.minHeight = "0";
 
 	canvasHost.style.flex = "1 1 auto";
+	canvasHost.style.minHeight = MIN_PLOT_HEIGHT;
+	canvasHost.style.minWidth = "0";
+	canvasHost.style.position = "relative";
+	canvasHost.style.overflow = "hidden";
 
 	root.appendChild(toolbar);
 	root.appendChild(canvasHost);
@@ -98,11 +104,17 @@ export function observeSize(
 	};
 }
 
-export function createCanvas(canvasHost: HTMLElement) {
+export function createOverlayCanvas(canvasHost: HTMLElement) {
 	const canvas = document.createElement("canvas");
+
+	canvas.style.position = "absolute";
+	canvas.style.inset = "0";
 	canvas.style.display = "block";
 	canvas.style.width = "100%";
 	canvas.style.height = "100%";
+	canvas.style.touchAction = "none";
+	canvas.style.zIndex = "2"; // above WebGL
+
 	canvasHost.appendChild(canvas);
 
 	function resizeCanvas(cssWidth: number, cssHeight: number) {
@@ -118,5 +130,6 @@ export function createCanvas(canvasHost: HTMLElement) {
 
 		return { devicePixelRatio, width, height };
 	}
+
 	return { canvas, resizeCanvas };
 }

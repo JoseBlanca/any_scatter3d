@@ -2,7 +2,7 @@ import type { WidgetModel } from "./model";
 import {
 	createWidgetRoot,
 	observeSize,
-	createCanvas,
+	createOverlayCanvas,
 	pointerInfoFromEvent,
 	get2dContext,
 } from "./view";
@@ -17,6 +17,7 @@ import {
 	drawOverlay,
 } from "./interaction";
 import { createControlBar, renderControlBar, DEFAULT_UI_CONFIG } from "./ui";
+import { createThreeScene } from "./three_scene";
 
 const RESIZE_THRESHOLD_PX = 2;
 
@@ -31,9 +32,48 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 	const abortController = new AbortController();
 
 	// Canvas + interaction state
-	const { canvas, resizeCanvas } = createCanvas(canvasHost);
+	// --- 3D layer (three.js) ---
+	const three = createThreeScene(canvasHost, model);
+	three.domElement.style.position = "absolute";
+	three.domElement.style.inset = "0";
+	three.domElement.style.zIndex = "1"; // below overlay
+	three.setPointsFromModel();
+	three.setPointSizeFromModel();
+
+	// --- 2D overlay canvas (lasso) ---
+	const { canvas, resizeCanvas } = createOverlayCanvas(canvasHost);
 	const ctx = get2dContext(canvas);
+
+	model.on("change:points_t", () => {
+		three.setPointsFromModel();
+	});
+
+	model.on("change:point_size_t", () => three.setPointSizeFromModel());
+	model.on("change:points_dtype_t", () => three.setPointsFromModel());
+	model.on("change:points_stride_t", () => three.setPointsFromModel());
+
 	const state = createInteractionState();
+
+	const r = canvasHost.getBoundingClientRect();
+	if (r.width > 0 && r.height > 0) {
+		three.setSize(
+			Math.round(r.width),
+			Math.round(r.height),
+			window.devicePixelRatio || 1,
+		);
+	}
+	const cssW = Math.round(r.width);
+	const cssH = Math.round(r.height);
+	if (cssW > 0 && cssH > 0) {
+		const { devicePixelRatio, width, height } = resizeCanvas(cssW, cssH);
+		state.dpr = devicePixelRatio;
+		state.pixelWidth = width;
+		state.pixelHeight = height;
+		three.setSize(cssW, cssH, devicePixelRatio);
+	}
+
+	three.setPointsFromModel();
+	three.setPointSizeFromModel();
 
 	const uiCfg = DEFAULT_UI_CONFIG;
 	const bar = createControlBar(toolbar, uiCfg);
@@ -45,6 +85,17 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 			operation: state.mode.kind === "lasso" ? state.mode.operation : "add",
 		} as const;
 		renderControlBar(bar, uiCfg, uiState);
+
+		// Pointer routing:
+		// - Rotate: interact with three.js canvas (OrbitControls)
+		// - Lasso: interact with overlay canvas (your lasso code)
+		if (uiState.mode === "rotate") {
+			three.domElement.style.pointerEvents = "auto";
+			canvas.style.pointerEvents = "none";
+		} else {
+			three.domElement.style.pointerEvents = "none";
+			canvas.style.pointerEvents = "auto";
+		}
 	}
 
 	// initial mode
@@ -191,11 +242,14 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		state.dpr = devicePixelRatio;
 		state.pixelWidth = width;
 		state.pixelHeight = height;
+
+		three.setSize(cssW, cssH, devicePixelRatio);
 	});
 
 	// RAF loop: draw overlay (later: render 3D + overlay)
 	let rafId = 0;
 	const frame = () => {
+		three.render();
 		drawOverlay(state, ctx);
 		rafId = requestAnimationFrame(frame);
 	};
@@ -208,6 +262,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		abortController.abort();
 		stopObserving();
 		cancelAnimationFrame(rafId);
+		three.dispose();
 		canvas.remove();
 	};
 	(el as any).__any_scatter3d_cleanup = cleanup;
