@@ -329,11 +329,18 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		three.setColorsFromCategory(u8, colorsForCodes);
 
 		// Commit to Python once per lasso end.
-		const u8copy = new Uint8Array(u8);
-		model.set("coded_categories_t", { ...codedAll, [categoryCol]: u8copy });
-		model.save_changes();
+		const u8copy = new Uint8Array(u8); // copy to avoid sharing the same backing store
 
-		model.set("coded_categories_t", { ...codedAll, [categoryCol]: u8copy });
+		// IMPORTANT: slice to an exact-length ArrayBuffer (no extra capacity)
+		const buf = u8copy.buffer.slice(
+			u8copy.byteOffset,
+			u8copy.byteOffset + u8copy.byteLength,
+		);
+
+		// Wrap in DataView to strongly signal “binary” to serializers
+		const payload = new DataView(buf);
+
+		model.set("coded_categories_t", { ...codedAll, [categoryCol]: payload });
 		model.save_changes();
 	}
 
