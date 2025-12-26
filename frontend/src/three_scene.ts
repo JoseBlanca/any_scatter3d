@@ -61,7 +61,6 @@ export function createThreeScene(
 ): ThreeScene {
 	// --- renderer / scene / camera ---
 	const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-	renderer.setClearColor(0x000000, 0); // transparent; your root bg can show through
 	canvasHost.appendChild(renderer.domElement);
 	const bg = String(model.get("background") ?? "#ffffff");
 	renderer.setClearColor(new THREE.Color(bg), 1);
@@ -163,20 +162,10 @@ export function createThreeScene(
 		geom.dispose();
 		mat.dispose();
 		renderer.dispose();
-		// remove dom element
+		renderer.forceContextLoss();
 		renderer.domElement.remove();
+		scene.remove(pointsObj);
 	}
-
-	console.log(
-		"points bytes len",
-		bytesToUint8Array(model.get("points_t")).byteLength,
-	);
-	console.log(
-		"initial f32 length",
-		initial.length,
-		"first 9",
-		Array.from(initial.slice(0, 9)),
-	);
 
 	return {
 		domElement: renderer.domElement,
