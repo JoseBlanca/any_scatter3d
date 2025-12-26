@@ -21,6 +21,10 @@ import { createThreeScene } from "./three_scene";
 
 const RESIZE_THRESHOLD_PX = 2;
 
+type LabelsForCategories = Record<string, string[]>;
+type CodedCategories = Record<string, unknown>; // values are "bytes-like"
+type CategoriesColors = Record<string, number[][]>; // list of [r,g,b]
+
 export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 	const cleanupPrev = (el as any).__any_scatter3d_cleanup as
 		| undefined
@@ -132,7 +136,6 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		{ signal: abortController.signal },
 	);
 
-	type LabelsForCategories = Record<string, string[]>;
 	const labelsForCategories =
 		(model.get("labels_for_categories_t") as LabelsForCategories) ?? {};
 	function getLabelsForCategories(): LabelsForCategories {
@@ -219,22 +222,49 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 				bar.categorySelect.value,
 				labelsForCategories,
 			);
+			applyColorsFromSelectedCategory();
 		},
 		{ signal: abortController.signal },
 	);
 
+	function applyColorsFromSelectedCategory() {
+		const category = bar.categorySelect.value;
+		if (!category) return;
+
+		const coded = (model.get("coded_categories_t") as CodedCategories) ?? {};
+		const palettes =
+			(model.get("categories_colors_t") as CategoriesColors) ?? {};
+
+		const codesBytes = coded[category];
+		const colorsForCodes = palettes[category];
+
+		if (!codesBytes || !colorsForCodes) return;
+
+		three.setColorsFromCategory(codesBytes, colorsForCodes);
+	}
 	refreshCategoriesUI();
+	applyColorsFromSelectedCategory();
+
+	const category = bar.categorySelect.value;
 
 	const onPointsChange = () => three.setPointsFromModel();
 	const onPointSizeChange = () => three.setPointSizeFromModel();
 	const onPointsDtypeChange = () => three.setPointsFromModel();
 	const onPointsStrideChange = () => three.setPointsFromModel();
-	const onLabelsChange = () => refreshCategoriesUI();
+	const onLabelsChange = () => {
+		refreshCategoriesUI();
+		applyColorsFromSelectedCategory();
+	};
+	const onCodedCategoriesChange = () => applyColorsFromSelectedCategory();
+	const onCategoriesColorsChange = () => applyColorsFromSelectedCategory();
+
 	model.on("change:points_t", onPointsChange);
 	model.on("change:point_size_t", onPointSizeChange);
 	model.on("change:points_dtype_t", onPointsDtypeChange);
 	model.on("change:points_stride_t", onPointsStrideChange);
 	model.on("change:labels_for_categories_t", onLabelsChange);
+	model.on("change:coded_categories_t", onCodedCategoriesChange);
+	model.on("change:categories_colors_t", onCategoriesColorsChange);
 
 	// Make root focusable so Enter/Escape works
 	root.tabIndex = 0;
@@ -347,6 +377,8 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		model.off("change:points_dtype_t", onPointsDtypeChange);
 		model.off("change:points_stride_t", onPointsStrideChange);
 		model.off("change:labels_for_categories_t", onLabelsChange);
+		model.off("change:coded_categories_t", onCodedCategoriesChange);
+		model.off("change:categories_colors_t", onCategoriesColorsChange);
 
 		stopObserving();
 		cancelAnimationFrame(rafId);

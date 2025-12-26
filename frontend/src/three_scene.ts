@@ -9,6 +9,10 @@ export type ThreeScene = {
 	setSize: (cssW: number, cssH: number, dpr: number) => void;
 	setPointsFromModel: () => void;
 	setPointSizeFromModel: () => void;
+	setColorsFromCategory: (
+		codesBytes: unknown,
+		colorsForCodes: number[][],
+	) => void;
 	render: () => void;
 	dispose: () => void;
 };
@@ -89,6 +93,19 @@ export function createThreeScene(
 	geom.setAttribute("position", positionAttr);
 	const attr = geom.getAttribute("position") as THREE.BufferAttribute;
 
+	const nPoints = positionAttr.count;
+	const colorArray = new Float32Array(nPoints * 3);
+
+	// default color (unset)
+	for (let i = 0; i < nPoints; i++) {
+		colorArray[i * 3 + 0] = 0.6;
+		colorArray[i * 3 + 1] = 0.6;
+		colorArray[i * 3 + 2] = 0.6;
+	}
+
+	const colorAttr = new THREE.BufferAttribute(colorArray, 3);
+	geom.setAttribute("color", colorAttr);
+
 	function frameCameraToGeometry() {
 		const bs = geom.boundingSphere;
 		if (!bs || !Number.isFinite(bs.radius) || bs.radius <= 0) return;
@@ -133,7 +150,7 @@ export function createThreeScene(
 	const mat = new THREE.PointsMaterial({
 		size: pointSize,
 		sizeAttenuation: true,
-		color: 0x111827,
+		vertexColors: true,
 	});
 
 	function setPointSizeFromModel() {
@@ -144,6 +161,25 @@ export function createThreeScene(
 
 	const pointsObj = new THREE.Points(geom, mat);
 	scene.add(pointsObj);
+
+	function setColorsFromCategory(
+		codesBytes: unknown,
+		colorsForCodes: number[][],
+	) {
+		const codes = new Uint32Array(bytesToUint8Array(codesBytes).buffer);
+		const colorArr = colorAttr.array as Float32Array;
+
+		for (let i = 0; i < codes.length; i++) {
+			const code = codes[i];
+			const [r, g, b] = colorsForCodes[code] ?? [0.6, 0.6, 0.6];
+			const j = i * 3;
+			colorArr[j] = r;
+			colorArr[j + 1] = g;
+			colorArr[j + 2] = b;
+		}
+
+		colorAttr.needsUpdate = true;
+	}
 
 	function setSize(cssW: number, cssH: number, dpr: number) {
 		renderer.setPixelRatio(dpr);
@@ -172,6 +208,7 @@ export function createThreeScene(
 		setSize,
 		setPointsFromModel,
 		setPointSizeFromModel,
+		setColorsFromCategory,
 		render,
 		dispose,
 	};
