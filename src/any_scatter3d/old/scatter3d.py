@@ -43,24 +43,21 @@ class Scatter3dWidget(anywidget.AnyWidget):
     # flat list [x0,y0,z0,x1,y1,z1,...]
     points_t = traitlets.List(trait=traitlets.Float()).tag(sync=True)
 
-    # { column_name: [value_0, value_1, ...] } (all as strings)
-    categories_t = traitlets.Dict(
+    coded_categories_t = traitlets.Dict(
+        key_trait=traitlets.Unicode(),
+        value_trait=traitlets.Bytes(),
+    ).tag(sync=True)
+
+    labels_for_categories_t = traitlets.Dict(
         key_trait=traitlets.Unicode(),
         value_trait=traitlets.List(trait=traitlets.Unicode()),
     ).tag(sync=True)
 
-    # {
-    #   column_name: {
-    #       category_str: [r, g, b],
-    #       ...
-    #   },
-    #   ...
-    # }
+    # palette aligned with labels: list of [r,g,b] floats
     categories_colors_t = traitlets.Dict(
         key_trait=traitlets.Unicode(),
-        value_trait=traitlets.Dict(
-            key_trait=traitlets.Unicode(),
-            value_trait=traitlets.List(trait=traitlets.Float(), minlen=3, maxlen=3),
+        value_trait=traitlets.List(
+            trait=traitlets.List(trait=traitlets.Float(), minlen=3, maxlen=3)
         ),
     ).tag(sync=True)
 
@@ -106,25 +103,46 @@ class Scatter3dWidget(anywidget.AnyWidget):
         self.points_t = array.ravel().tolist()
 
     def _compute_categories_and_colors(self) -> None:
-        cats_dict: dict[str, list[str]] = {}
-        colors_dict: dict[str, dict[str, list[float]]] = {}
+        coded_categories: dict[str, bytes] = {}
+        labels_for_categories: dict[str, list[str]] = {}
+        categories_colors: dict[str, list[list[float]]] = {}
 
         for col in self._categories_cols:
             series = self._dframe.get_column(col)
-            # ensure a real list of strings
+
+            # Per-point labels as strings
             values = [str(v) for v in series.to_list()]
-            cats_dict[col] = values
 
-            # unique values
-            different = sorted(set(values))
+            # Unique labels (sorted for stable coding)
+            labels = sorted(set(values))
+            if len(labels) > 256:
+                raise ValueError(
+                    f"Category column {col!r} has {len(labels)} unique values; "
+                    "byte coding supports at most 256."
+                )
+
+            # Map label -> byte code
+            label_to_code = {lab: i for i, lab in enumerate(labels)}
+
+            # Encode per-point codes into bytes (one byte per point)
+            codes = bytearray(len(values))
+            for i, v in enumerate(values):
+                codes[i] = label_to_code[v]
+            coded_categories[col] = bytes(codes)
+
+            # Build palette aligned with labels (index == code)
             color_cycle = cycle(TAB20_COLORS_RGB)
-            col_colors: dict[str, list[float]] = {}
-            for cat in different:
-                col_colors[cat] = list(next(color_cycle))
-            colors_dict[col] = col_colors
+            palette: list[list[float]] = []
+            for lab in labels:
+                rgb = list(next(color_cycle))
+                palette.append(rgb)
+            categories_colors[col] = palette
+            labels_for_categories[col] = labels
 
-        self.categories_t = cats_dict
-        self.categories_colors_t = colors_dict
+        # New fields (preferred by TS)
+        self.coded_categories_t = coded_categories
+        self.labels_for_categories_t = labels_for_categories
+        self.categories_colors_t = categories_colors
 
     def _get_categories_cols(self) -> list[str]:
         return self._categories_cols

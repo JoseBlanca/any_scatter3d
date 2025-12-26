@@ -186,16 +186,17 @@ export function createThreeScene(
 		codesBytes: unknown,
 		colorsForCodes: number[][],
 	) {
-		const codes = new Uint32Array(bytesToUint8Array(codesBytes).buffer);
+		const codes = bytesToUint8Array(codesBytes);
+		const colorAttr = geom.getAttribute("color") as THREE.BufferAttribute;
 		const colorArr = colorAttr.array as Float32Array;
 
-		for (let i = 0; i < codes.length; i++) {
-			const code = codes[i];
-			const [r, g, b] = colorsForCodes[code] ?? [0.6, 0.6, 0.6];
+		for (let i = 0; i < nPoints; i++) {
+			const code = codes[i] ?? 0;
+			const rgb = colorsForCodes[code] ?? colorsForCodes[0] ?? [1, 1, 1];
 			const j = i * 3;
-			colorArr[j] = r;
-			colorArr[j + 1] = g;
-			colorArr[j + 2] = b;
+			colorArr[j] = rgb[0];
+			colorArr[j + 1] = rgb[1];
+			colorArr[j + 2] = rgb[2];
 		}
 
 		colorAttr.needsUpdate = true;

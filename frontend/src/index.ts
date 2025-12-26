@@ -287,9 +287,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		//   const codes = new Uint32Array(bytesToUint8Array(codesBytes).buffer);
 		// so we must mutate as Uint32, not Uint8.
 		const u8 = bytesToUint8Array(codesBytesRaw);
-		if (u8.byteLength % 4 !== 0) return;
-
-		const codes = new Uint32Array(u8.buffer, u8.byteOffset, u8.byteLength / 4);
+		const codes = u8;
 
 		const targetCode = Number.parseInt(codeStr, 10);
 		if (!Number.isFinite(targetCode)) return;
@@ -331,9 +329,9 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		three.setColorsFromCategory(u8, colorsForCodes);
 
 		// Commit to Python once per lasso end.
-		// Clone the dict AND clone the bytes to ensure change detection + safe serialization.
-		const u8copy = new Uint8Array(u8.byteLength);
-		u8copy.set(u8);
+		const u8copy = new Uint8Array(u8);
+		model.set("coded_categories_t", { ...codedAll, [categoryCol]: u8copy });
+		model.save_changes();
 
 		model.set("coded_categories_t", { ...codedAll, [categoryCol]: u8copy });
 		model.save_changes();
