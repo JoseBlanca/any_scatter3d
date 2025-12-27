@@ -31,3 +31,22 @@ export function bytesToUint8Array(x: unknown): Uint8Array {
 
 	return new Uint8Array(0);
 }
+
+export function bytesToUint32ArrayLE(x: unknown): Uint32Array {
+	const u8 = bytesToUint8Array(x);
+	const byteOffset = u8.byteOffset;
+	const byteLength = u8.byteLength;
+
+	if (byteLength % 4 !== 0) {
+		throw new Error(`codes bytes length ${byteLength} not divisible by 4`);
+	}
+
+	// If aligned, zero-copy view. If not aligned, copy.
+	if (byteOffset % 4 === 0) {
+		return new Uint32Array(u8.buffer, byteOffset, byteLength / 4);
+	}
+
+	const copy = new Uint8Array(byteLength);
+	copy.set(u8);
+	return new Uint32Array(copy.buffer);
+}

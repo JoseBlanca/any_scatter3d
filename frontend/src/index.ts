@@ -20,7 +20,7 @@ import {
 } from "./interaction";
 import { createControlBar, renderControlBar, DEFAULT_UI_CONFIG } from "./ui";
 import { createThreeScene } from "./three_scene";
-import { bytesToUint8Array } from "./binary";
+import { bytesToUint32ArrayLE } from "./binary";
 
 const RESIZE_THRESHOLD_PX = 2;
 
@@ -178,7 +178,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		const labels = labelsForCategories[category];
 		if (!labels) return;
 
-		for (let i = 2; i < labels.length; i++) {
+		for (let i = 1; i < labels.length; i++) {
 			const opt = document.createElement("option");
 			opt.value = String(i); // code
 			opt.textContent = labels[i]; // label
@@ -286,8 +286,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		// You are currently interpreting codes as Uint32Array in three_scene.ts:
 		//   const codes = new Uint32Array(bytesToUint8Array(codesBytes).buffer);
 		// so we must mutate as Uint32, not Uint8.
-		const u8 = bytesToUint8Array(codesBytesRaw);
-		const codes = u8;
+		const codes32 = bytesToUint32ArrayLE(codesBytesRaw);
 
 		const targetCode = Number.parseInt(codeStr, 10);
 		if (!Number.isFinite(targetCode)) return;
@@ -309,15 +308,15 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 
 		if (op === "add") {
 			for (const idx of indices) {
-				if (codes[idx] !== targetCode) {
-					codes[idx] = targetCode;
+				if (codes32[idx] !== targetCode) {
+					codes32[idx] = targetCode;
 					changed = true;
 				}
 			}
 		} else {
 			for (const idx of indices) {
-				if (codes[idx] === targetCode) {
-					codes[idx] = unassignedCode;
+				if (codes32[idx] === targetCode) {
+					codes32[idx] = unassignedCode;
 					changed = true;
 				}
 			}
@@ -325,21 +324,25 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 
 		if (!changed) return;
 
+		// Create a byte view of the (possibly non-zero-offset) Uint32Array
+		const u8 = new Uint8Array(
+			codes32.buffer,
+			codes32.byteOffset,
+			codes32.byteLength,
+		);
+
 		// Recolor immediately (local)
 		three.setColorsFromCategory(u8, colorsForCodes);
 
-		// Commit to Python once per lasso end.
-		const u8copy = new Uint8Array(u8); // copy to avoid sharing the same backing store
+		// Commit to Python
+		const u8copy = new Uint8Array(u8); // copy to avoid sharing backing store
 
-		// IMPORTANT: slice to an exact-length ArrayBuffer (no extra capacity)
 		const buf = u8copy.buffer.slice(
 			u8copy.byteOffset,
 			u8copy.byteOffset + u8copy.byteLength,
 		);
 
-		// Wrap in DataView to strongly signal “binary” to serializers
 		const payload = new DataView(buf);
-
 		model.set("coded_categories_t", { ...codedAll, [categoryCol]: payload });
 		model.save_changes();
 	}

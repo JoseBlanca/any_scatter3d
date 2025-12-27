@@ -2,7 +2,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { WidgetModel } from "./model";
-import { bytesToUint8Array } from "./binary";
+import { bytesToUint8Array, bytesToUint32ArrayLE } from "./binary";
 
 export type ThreeScene = {
 	domElement: HTMLCanvasElement;
@@ -186,7 +186,12 @@ export function createThreeScene(
 		codesBytes: unknown,
 		colorsForCodes: number[][],
 	) {
-		const codes = bytesToUint8Array(codesBytes);
+		const codes = bytesToUint32ArrayLE(codesBytes);
+
+		if (codes.length !== nPoints) {
+			throw new Error(`codes length ${codes.length} != nPoints ${nPoints}`);
+		}
+
 		const colorAttr = geom.getAttribute("color") as THREE.BufferAttribute;
 		const colorArr = colorAttr.array as Float32Array;
 
@@ -198,7 +203,6 @@ export function createThreeScene(
 			colorArr[j + 1] = rgb[1];
 			colorArr[j + 2] = rgb[2];
 		}
-
 		colorAttr.needsUpdate = true;
 	}
 
