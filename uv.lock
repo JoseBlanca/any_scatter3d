@@ -11,6 +11,7 @@ dependencies = [
     { name = "marimo" },
     { name = "narwhals" },
     { name = "numpy" },
+    { name = "pandas" },
 ]
 
 [package.dev-dependencies]
@@ -24,6 +25,7 @@ requires-dist = [
     { name = "marimo", specifier = ">=0.18.4" },
     { name = "narwhals", specifier = ">=2.14.0" },
     { name = "numpy", specifier = ">=2.3.5" },
+    { name = "pandas", specifier = ">=2.3.3" },
 ]
 
 [package.metadata.requires-dev]

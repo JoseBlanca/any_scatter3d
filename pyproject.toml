@@ -9,6 +9,7 @@ dependencies = [
     "marimo>=0.18.4",
     "narwhals>=2.14.0",
     "numpy>=2.3.5",
+    "pandas>=2.3.3",
 ]
 
 [build-system]
