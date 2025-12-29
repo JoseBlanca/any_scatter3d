@@ -1,14 +1,14 @@
 import os
 from pathlib import Path
 from itertools import cycle
-from math import nan
+from enum import Enum
+from collections import OrderedDict
 
 import anywidget
 import traitlets
 import numpy
 import pandas
 import narwhals
-from narwhals.typing import IntoFrameT
 
 
 PACKAGE_DIR = Path(__file__).parent
@@ -19,7 +19,7 @@ DEF_DEV_ESM = "http://127.0.0.1:5173/src/index.ts"
 FLOAT_TYPE = "<f4"
 FLOAT_TYPE_TS = "float32"
 CATEGORY_CODES_DTYPE = "<u4"  # uint32 little-endian
-UNSET_COLOR = [0.6, 0.6, 0.6]
+MISSING_COLOR = [0.6, 0.6, 0.6]
 MISSING_CATEGORY_VALUE = "Unassigned"
 
 DARK_GREY = "#111111"
@@ -47,6 +47,169 @@ TAB20_COLORS_RGB = [
     (0.09019607843137255, 0.7450980392156863, 0.8117647058823529),
     (0.6196078431372549, 0.8549019607843137, 0.8980392156862745),
 ]
+
+
+class LabelListErrorResponse(Enum):
+    ERROR = "error"
+    SET_MISSING = "missing"
+
+
+class Category:
+    def __init__(
+        self,
+        values: narwhals.typing.IntoSeriesT,
+        label_list=None,
+        color_palette=None,
+        missing_color=MISSING_COLOR,
+    ):
+        # If the color_coding is given we will raise a ValueError if a label has no color
+        # allowed_labels will be sorted if created from values.
+        self._native_values_dtype = values.dtype
+        values = narwhals.from_native(values, series_only=True)
+        self._narwhals_values_dtype = values.dtype
+        self._name = values.name
+        self._values_implementation = values.implementation
+
+        label_list = self._initialize_label_list(values, label_list)
+
+        self._label_coding = None
+        self._label_coding = self._create_label_coding(label_list)
+
+        self._encode_values(values)
+
+    @staticmethod
+    def _get_unique_labels_in_values(values):
+        return values.drop_nulls().unique().to_list()
+
+    def _initialize_label_list(self, values, label_list):
+        unique_labels = self._get_unique_labels_in_values(values)
+        if label_list is not None:
+            labels_not_in_label_list = set(label_list).difference(unique_labels)
+            if labels_not_in_label_list:
+                raise RuntimeError(
+                    f"To initialize the label list we need a label list to include all unique values, these are missing: {labels_not_in_label_list}"
+                )
+        else:
+            label_list = sorted(unique_labels)
+        return label_list
+
+    @staticmethod
+    def _create_label_coding(label_list):
+        label_coding = OrderedDict(
+            [(label, idx) for idx, label in enumerate(label_list, start=1)]
+        )
+        return label_coding
+
+    def _encode_values(self, values):
+        coded_values = values.replace_strict(
+            self._label_coding, default=0, return_dtype=narwhals.UInt16
+        ).to_numpy()
+        self._coded_values = coded_values
+
+    @property
+    def values(self):
+        coded_values = self._coded_values
+        label_coding = self._label_coding
+        if label_coding is None:
+            raise RuntimeError("label coding should be set, but it is not")
+        reverse_coding = {code: label for label, code in label_coding.items()}
+
+        if self._values_implementation == narwhals.Implementation.PANDAS:
+            if pandas.api.types.is_extension_array_dtype(self._native_values_dtype):
+                reverse_coding[0] = pandas.NA
+            else:
+                reverse_coding[0] = None
+
+            coded_values = pandas.Series(coded_values, name=self.name)
+            values = coded_values.replace(reverse_coding).astype(
+                self._native_values_dtype
+            )
+            return values
+        else:
+            coded_values = narwhals.new_series(
+                name=self.name, values=coded_values, backend=self._values_implementation
+            )
+            reverse_coding[0] = None
+            values = coded_values.replace_strict(
+                reverse_coding, return_dtype=self._narwhals_values_dtype
+            )
+            return values.to_native()
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def label_list(self) -> list:
+        label_coding = self._label_coding
+        if label_coding is None:
+            raise RuntimeError("label coding should be set, but it is not")
+
+        return list(label_coding.keys())
+
+    def set_label_list(
+        self,
+        new_labels: list[str] | list[int],
+        on_missing_labels=LabelListErrorResponse.ERROR,
+    ):
+        if not new_labels:
+            raise ValueError("No labels given")
+
+        if new_labels == self.label_list:
+            return
+
+        old_label_coding = self._label_coding
+        if old_label_coding is None:
+            raise RuntimeError(
+                "label coding should be set before trying to modify the label list"
+            )
+        labels_in_values = old_label_coding.keys()
+
+        labels_to_remove = list(set(labels_in_values).difference(new_labels))
+        if len(labels_to_remove) == len(labels_in_values):
+            raise ValueError(
+                "None of the new labels matches the labels found in the category"
+            )
+        if on_missing_labels == LabelListErrorResponse.ERROR and labels_to_remove:
+            raise ValueError(
+                f"Some labels are missing from the list ({labels_to_remove}), but the action set for missing is error"
+            )
+
+        new_label_coding = self._create_label_coding(new_labels)
+
+        old_values = self._coded_values
+        new_values = numpy.full_like(self._coded_values, fill_value=0)
+        for label, new_code in new_label_coding.items():
+            if label in old_label_coding:
+                old_code = old_label_coding[label]
+            else:
+                continue
+            new_values[old_values == old_code] = new_code
+        self._coded_values = new_values
+        self._label_coding = new_label_coding
+
+    @property
+    def coded_values(self):
+        return self._coded_values
+
+    @property
+    def label_coding(self):
+        label_coding = self._label_coding
+        if label_coding is None:
+            raise RuntimeError(
+                "label coding should be set before trying to modify the label list"
+            )
+        return [(label, code) for label, code in label_coding.items()]
+
+    @property
+    def colors(self): ...
+
+    # the colors for all labels
+
+    @property
+    def color_coding(self): ...
+
+    # label -> color[r, g, b] coded from 0 to 1 as float
 
 
 def _esm_source() -> str | Path:
@@ -156,7 +319,7 @@ class Scatter3dWidget(anywidget.AnyWidget):
 
     def __init__(
         self,
-        dframe: IntoFrameT,
+        dframe: narwhals.typing.IntoFrameT,
         categories_cols: list[str],
         x_col: str = "x",
         y_col: str = "y",
