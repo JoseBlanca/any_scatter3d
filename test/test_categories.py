@@ -110,3 +110,16 @@ def test_mutate_coded_labels():
     new_values = numpy.array([0, 2, 2, 1, 2, 1], dtype=coded_values.dtype)
     category.set_coded_values(new_values, label_list=category.label_list)
     assert numpy.all(numpy.equal(new_values, category.coded_values))
+
+
+def test_color_palette():
+    for series in get_test_series():
+        category = Category(series["values"])
+
+        palette = category.color_palette
+        for label in category.label_list:
+            assert len(palette[label]) == 3
+
+        coded_palette = category.color_palette_for_codes
+        for _label, code in category.label_coding:
+            assert len(coded_palette[code]) == 3

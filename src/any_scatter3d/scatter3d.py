@@ -3,6 +3,7 @@ from pathlib import Path
 from itertools import cycle
 from enum import Enum
 from collections import OrderedDict
+from typing import Any
 
 import anywidget
 import traitlets
@@ -19,7 +20,7 @@ DEF_DEV_ESM = "http://127.0.0.1:5173/src/index.ts"
 FLOAT_TYPE = "<f4"
 FLOAT_TYPE_TS = "float32"
 CATEGORY_CODES_DTYPE = "<u4"  # uint32 little-endian
-MISSING_COLOR = [0.6, 0.6, 0.6]
+MISSING_COLOR = (0.6, 0.6, 0.6)
 MISSING_CATEGORY_VALUE = "Unassigned"
 
 DARK_GREY = "#111111"
@@ -54,16 +55,26 @@ class LabelListErrorResponse(Enum):
     SET_MISSING = "missing"
 
 
+def _is_valid_color(color):
+    if not isinstance(color, tuple):
+        raise ValueError(f"Invalid color, should be tuples with three floats {color}")
+    if len(color) != 3:
+        raise ValueError(f"Invalid color, should be tuples with three floats {color}")
+    for value in color:
+        if value < 0 or value > 1:
+            raise ValueError(
+                f"Invalid color, should be coded as floats from 0 to 1 {color}"
+            )
+
+
 class Category:
     def __init__(
         self,
         values: narwhals.typing.IntoSeriesT,
         label_list=None,
-        color_palette=None,
-        missing_color=MISSING_COLOR,
+        color_palette: dict[Any, tuple[float, float, float]] | None = None,
+        missing_color: tuple[float, float, float] = MISSING_COLOR,
     ):
-        # If the color_coding is given we will raise a ValueError if a label has no color
-        # allowed_labels will be sorted if created from values.
         self._native_values_dtype = values.dtype
         values = narwhals.from_native(values, series_only=True)
         self._narwhals_values_dtype = values.dtype
@@ -76,6 +87,11 @@ class Category:
         self._label_coding = self._create_label_coding(label_list)
 
         self._encode_values(values)
+
+        self.create_color_palette(color_palette)
+
+        _is_valid_color(missing_color)
+        self._missing_color = missing_color
 
     @staticmethod
     def _get_unique_labels_in_values(values):
@@ -231,15 +247,39 @@ class Category:
             )
         return [(label, code) for label, code in label_coding.items()]
 
+    def create_color_palette(
+        self, color_palette: dict[Any, tuple[float, float, float]] | None = None
+    ):
+        default_colors = cycle(TAB20_COLORS_RGB)
+
+        palette = {}
+        for label in self.label_list:
+            if color_palette:
+                try:
+                    color = color_palette[label]
+                    _is_valid_color(color)
+                except KeyError:
+                    raise KeyError(
+                        f"Color palette given, but color missing for label: {label}"
+                    )
+            else:
+                color = next(default_colors)
+            palette[label] = tuple(color)
+        self._color_palette = palette
+
     @property
-    def colors(self): ...
-
-    # the colors for all labels
+    def color_palette(self):
+        return self._color_palette.copy()
 
     @property
-    def color_coding(self): ...
+    def color_palette_for_codes(self):
+        palette = self.color_palette
 
-    # label -> color[r, g, b] coded from 0 to 1 as float
+        return {code: palette[label] for label, code in self.label_coding}
+
+    @property
+    def missing_color(self):
+        return self._missing_color
 
 
 def _esm_source() -> str | Path:
