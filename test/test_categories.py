@@ -1,3 +1,4 @@
+import numpy
 import pandas
 import polars
 import pytest
@@ -101,3 +102,11 @@ def test_remove_label():
     )
     assert list(category.coded_values) == [1, 1, 0, 2, 1, 0]
     assert category.label_coding == [(2, 1), (1, 2), (3, 3), (4, 4)]
+
+
+def test_mutate_coded_labels():
+    category = Category(get_test_series()[0]["values"])
+    coded_values = category.coded_values
+    new_values = numpy.array([0, 2, 2, 1, 2, 1], dtype=coded_values.dtype)
+    category.set_coded_values(new_values, label_list=category.label_list)
+    assert numpy.all(numpy.equal(new_values, category.coded_values))

@@ -188,6 +188,36 @@ class Category:
         self._coded_values = new_values
         self._label_coding = new_label_coding
 
+    def set_coded_values(
+        self,
+        coded_values: numpy.ndarray,
+        label_list: list[str] | list[int],
+        skip_copying_array=False,
+    ):
+        if not label_list == self.label_list:
+            raise ValueError(
+                "The label list used to code the new values should match the current one"
+            )
+
+        label_encoding = self._create_label_coding(label_list)
+        if self._label_coding != label_encoding:
+            raise RuntimeError("The new label encoding wouldn't match the old one")
+
+        old_coded_values = self.coded_values
+        if old_coded_values.shape != coded_values.shape:
+            raise ValueError(
+                "The new coded values array has a different size than the older one"
+            )
+        if old_coded_values.dtype != coded_values.dtype:
+            raise ValueError(
+                "The dtype of the new coding values does not match the one of the old ones"
+            )
+
+        if not skip_copying_array:
+            coded_values = coded_values.copy(order="K")
+
+        self._coded_values = coded_values
+
     @property
     def coded_values(self):
         return self._coded_values
