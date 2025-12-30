@@ -9,6 +9,7 @@ def _():
     import random
     from any_scatter3d import Scatter3dWidget, Category
 
+    import marimo
     import numpy as np
     import pandas
 
@@ -20,12 +21,14 @@ def _():
     species = Category(pandas.Series(species, name='species'))
 
     w = Scatter3dWidget(xyz=points, category=species)
-    w
-    return (species,)
+    ui = marimo.ui.anywidget(w)
+    ui
+    return species, ui
 
 
 @app.cell
-def _(species):
+def _(species, ui):
+    ui.lasso_result_t
     print(species.values.value_counts())
     return
 
