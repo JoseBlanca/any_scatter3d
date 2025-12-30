@@ -281,6 +281,10 @@ class Category:
     def missing_color(self):
         return self._missing_color
 
+    @property
+    def num_values(self):
+        return self.coded_values.size
+
 
 def _esm_source() -> str | Path:
     if os.environ.get("ANY_SCATTER3D_DEV", ""):
@@ -299,6 +303,136 @@ def _is_missing(value: object) -> bool:
 
 
 class Scatter3dWidget(anywidget.AnyWidget):
+    _esm = _esm_source()
+
+    # xyz coords for the points
+    # Packed float32 array of shape (N, 3), row-major.
+    # TS interprets as Float32Array with length 3*N.
+    xyz_bytes_t = traitlets.Bytes(
+        default_value=b"",
+        help="Packed float32 Nx3, row-major.",
+    ).tag(sync=True)
+
+    # Packed uint16 array of length N.
+    # Code 0 means "missing / unassigned".
+    # Codes 1..K correspond to labels_t[0..K-1].
+    coded_values_t = traitlets.Bytes(
+        default_value=b"",
+        help="Packed uint16 length N. 0=missing, 1..K correspond to labels_t.",
+    ).tag(sync=True)
+
+    # List[str] of length K, stable ordering.
+    # labels_t[i] corresponds to code (i+1).
+    labels_t = traitlets.List(
+        traitlets.Unicode(),
+        default_value=[],
+        help="Label list (length K), where code = index+1.",
+    ).tag(sync=True)
+
+    # List[[r,g,b]] of length K, aligned with labels_t.
+    # Each component is float in [0,1].
+    colors_t = traitlets.List(
+        traitlets.List(traitlets.Float(), minlen=3, maxlen=3),
+        default_value=[],
+        help="Per-label RGB colors (length K) aligned with labels_t; floats in [0,1].",
+    ).tag(sync=True)
+
+    # [r,g,b] used when coded value is 0 or otherwise missing
+    missing_color_t = traitlets.List(
+        traitlets.Float(),
+        default_value=[0.6, 0.6, 0.6],
+        minlen=3,
+        maxlen=3,
+        help="RGB color for missing/unassigned (code 0).",
+    ).tag(sync=True)
+
+    # --- lasso round-trip channels ---
+    # Dict message TS -> Python describing a committed lasso operation.
+    lasso_request_t = traitlets.Dict(
+        default_value={},
+        help=(
+            "TS->Python event message for lasso commit. "
+            "Set to a new dict each time to trigger observers."
+        ),
+    ).tag(sync=True)
+
+    # Dict message Python -> TS acknowledging the last request (ok/error).
+    lasso_result_t = traitlets.Dict(
+        default_value={},
+        help="Python->TS response message for the last lasso_request_t (ok/error).",
+    ).tag(sync=True)
+
+    def __init__(self, xyz: numpy.ndarray, category: Category):
+        if category is not None and xyz.shape[0] != category.num_values:
+            raise ValueError(
+                f"The number of points ({xyz.shape[0]}) should match "
+                f"the number of values in the category: {self.category.num_values}"
+            )
+
+        self._xyz = None
+        self._category = None
+        self.xyz = xyz
+        self.category = category
+
+    @staticmethod
+    def _pack_xyz_float32_c(xyz: numpy.ndarray) -> tuple[numpy.ndarray, bytes]:
+        """
+        Return (xyz_float32_c, packed_bytes).
+        - xyz_float32_c: float32, C-contiguous, shape (N,3)
+        - packed_bytes: xyz_float32_c.tobytes(order="C")
+        """
+        if not isinstance(xyz, numpy.ndarray):
+            raise ValueError("xyz should be a numpy array")
+
+        if xyz.ndim != 2 or xyz.shape[1] != 3:
+            raise ValueError("xyz should have shape (N, 3)")
+
+        # Convert dtype to float32 (TS expects Float32Array)
+        # Ensure row-major contiguous layout for stable tobytes.
+        xyz_f32 = numpy.asarray(xyz, dtype=numpy.float32, order="C")
+        if not xyz_f32.flags["C_CONTIGUOUS"]:
+            xyz_f32 = numpy.ascontiguousarray(xyz_f32)
+
+        return xyz_f32, xyz_f32.tobytes(order="C")
+
+    def _get_xyz(self) -> numpy.ndarray:
+        if self._xyz is None:
+            raise RuntimeError("xyz has not been set")
+        return self._xyz.copy()
+
+    def _set_xyz(self, xyz: numpy.ndarray) -> None:
+        xyz_f32, xyz_bytes = self._pack_xyz_float32_c(xyz)
+
+        # If category already set, enforce N consistency
+        if self._category is not None and xyz_f32.shape[0] != self.category.num_values:
+            raise ValueError(
+                f"The number of points ({xyz_f32.shape[0]}) should match "
+                f"the number of values in the category: {self.category.num_values}"
+            )
+
+        self._xyz = xyz_f32
+        self.xyz_bytes_t = xyz_bytes
+
+    xyz = property(_get_xyz, _set_xyz)
+
+    def _get_category(self):
+        return self._category
+
+    def _set_category(self, category):
+        if category.num_values != self.num_points:
+            raise ValueError(
+                f"The number of values in the category ({category.num_values}) should match the number of points {self.num_points}"
+            )
+        self._category = category
+
+    @property
+    def num_points(self):
+        return self.xyz.shape[0]
+
+    category = property(_get_category, _set_category)
+
+
+class OldScatter3dWidget(anywidget.AnyWidget):
     _esm = _esm_source()
     # packed float32 xyzxyz...
     points_t = traitlets.Bytes(default_value=b"").tag(sync=True)
