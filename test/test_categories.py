@@ -14,12 +14,14 @@ def get_test_series():
         "name": "classes",
         "label_list": [1, 2, 3],
         "num_values": 6,
+        "num_unassigned": 1,
     }
     series2 = {
         "values": polars.Series("species1", ["species2", "species1", "species3", None]),
         "name": "species1",
         "label_list": ["species1", "species2", "species3"],
         "num_values": 4,
+        "num_unassigned": 1,
     }
     series3 = {
         "values": pandas.Series(
@@ -28,6 +30,7 @@ def get_test_series():
         "name": "species2",
         "label_list": ["species1", "species2", "species3"],
         "num_values": 4,
+        "num_unassigned": 1,
     }
     series4 = {
         "values": pandas.Series(
@@ -38,12 +41,14 @@ def get_test_series():
         "name": "species3",
         "label_list": ["species1", "species2", "species3"],
         "num_values": 4,
+        "num_unassigned": 1,
     }
     series5 = {
         "values": pandas.Series([2, 2, 3, 1, 2], name="classes2", dtype=int),
         "name": "classes2",
         "label_list": [1, 2, 3],
         "num_values": 5,
+        "num_unassigned": 0,
     }
     return [series1, series2, series3, series4, series5]
 
@@ -54,6 +59,7 @@ def test_category_init():
         assert series["values"].equals(category.values)
         assert series["name"] == category.name
         assert series["num_values"] == category.num_values
+        assert series["num_unassigned"] == category.num_unassigned
 
     values = pandas.Series([2, 2, 3, 1, 2], name="classes2", dtype=int)
     category = Category(values=values, label_list=[3, 1, 2])

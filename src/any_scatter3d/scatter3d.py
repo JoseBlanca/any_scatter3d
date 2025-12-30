@@ -319,6 +319,12 @@ class Category:
     def num_values(self):
         return self.coded_values.size
 
+    @property
+    def num_unassigned(self) -> int:
+        """Number of values unassigned / missing."""
+        coded = self._coded_values
+        return int(numpy.count_nonzero(coded == 0))
+
 
 def _esm_source() -> str | Path:
     if os.environ.get("ANY_SCATTER3D_DEV", ""):
