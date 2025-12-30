@@ -194,16 +194,32 @@ class Category:
 
         return list(label_coding.keys())
 
+    @staticmethod
+    def _get_next_unused_color(used_colors, color_cycle):
+        n_colors = len(TAB20_COLORS_RGB)
+        n_tried = 0
+        while True:
+            color = tuple(next(color_cycle))
+            n_tried += 1
+            if color not in used_colors:
+                return color
+            if n_tried >= n_colors:
+                # TAB20 exhausted: allow repeats
+                return color
+
     def set_label_list(
         self,
         new_labels: list[str] | list[int],
         on_missing_labels=LabelListErrorResponse.ERROR,
+        color_palette: dict[Any, tuple[float, float, float]] | None = None,
     ):
         if not new_labels:
             raise ValueError("No labels given")
 
         if new_labels == self.label_list:
             return
+
+        overrides = color_palette or {}
 
         old_label_coding = self._label_coding
         if old_label_coding is None:
@@ -224,17 +240,43 @@ class Category:
 
         new_label_coding = self._create_label_coding(new_labels)
 
+        # --- recode values to new codes ---
         old_values = self._coded_values
         new_values = numpy.full_like(self._coded_values, fill_value=0)
         for label, new_code in new_label_coding.items():
             if label in old_label_coding:
                 old_code = old_label_coding[label]
-            else:
-                continue
-            new_values[old_values == old_code] = new_code
+                new_values[old_values == old_code] = new_code
         self._coded_values = new_values
         self._label_coding = new_label_coding
+
+        # --- update palette ---
+        old_palette = getattr(self, "_color_palette", {}) or {}
+        new_palette: dict[Any, tuple[float, float, float]] = {}
+
+        # pass 1: overrides > old palette
+        for label in new_labels:
+            if label in overrides:
+                color = overrides[label]
+                _is_valid_color(color)
+                new_palette[label] = tuple(color)
+            elif label in old_palette:
+                new_palette[label] = tuple(old_palette[label])
+
+        # pass 2: assign remaining labels from TAB20 cycle
+        color_cycle = cycle(TAB20_COLORS_RGB)
+        used_colors = set(new_palette.values())
+        for label in new_labels:
+            if label in new_palette:
+                continue
+            color = self._get_next_unused_color(used_colors, color_cycle)
+            used_colors.add(color)
+            new_palette[label] = color
+
+        self._color_palette = new_palette
+
         self._notify("label_list")
+        self._notify("palette")
 
     def set_coded_values(
         self,

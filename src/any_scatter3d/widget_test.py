@@ -7,7 +7,7 @@ app = marimo.App(width="medium")
 @app.cell
 def _():
     import random
-    from any_scatter3d import Scatter3dWidget, Category
+    from any_scatter3d import Scatter3dWidget, Category, LabelListErrorResponse
 
     import marimo
     import numpy as np
@@ -22,6 +22,8 @@ def _():
 
     w = Scatter3dWidget(xyz=points, category=species)
     w.point_size = 0.15
+    species.set_label_list(['species1'], on_missing_labels=LabelListErrorResponse.SET_MISSING)
+    species.set_label_list(['species1', 'species4'])
     ui = marimo.ui.anywidget(w)
     ui
     return species, ui
@@ -31,6 +33,7 @@ def _():
 def _(species, ui):
     ui.lasso_result_t
     print(species.values.value_counts())
+    print(species.num_unassigned)
     return
 
 
