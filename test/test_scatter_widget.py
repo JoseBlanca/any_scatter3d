@@ -59,3 +59,105 @@ def test_coded_values_t_updates_when_category_set_label_list_changes_codes():
     decoded = numpy.frombuffer(w.coded_values_t, dtype=numpy.uint16)
     expected = numpy.array([1, 2, 0, 1], dtype=numpy.uint16)  # Spain->1, Italy->2
     numpy.testing.assert_array_equal(decoded, expected)
+
+
+def pack_mask_big(indices: list[int], n: int) -> bytes:
+    """
+    Packed bits, bitorder='big'. Point i is bit (7-(i%8)) in byte i//8.
+    """
+    bits = numpy.zeros(n, dtype=numpy.uint8)
+    bits[numpy.array(indices, dtype=numpy.int64)] = 1
+    packed = numpy.packbits(bits, bitorder="big")
+    return packed.tobytes(order="C")
+
+
+def decode_u16(buf: bytes) -> numpy.ndarray:
+    return numpy.frombuffer(buf, dtype=numpy.uint16)
+
+
+def test_lasso_add_with_packed_bitmask():
+    s = pandas.Series(["Spain", "Italy", None, "Spain"], name="country")
+    cat = Category(values=s, label_list=["Italy", "Spain"])  # Italy=1, Spain=2
+
+    xyz = numpy.zeros((4, 3), dtype=numpy.float32)
+    w = Scatter3dWidget(xyz=xyz, category=cat)
+
+    # select indices [1,2]
+    w.lasso_mask_t = pack_mask_big([1, 2], n=4)
+    w.lasso_request_t = {
+        "kind": "lasso_commit",
+        "op": "add",
+        "label": "Spain",
+        "request_id": 1,
+    }
+
+    assert w.lasso_result_t["status"] == "ok"
+    decoded = decode_u16(w.coded_values_t)
+    expected = numpy.array([2, 2, 2, 2], dtype=numpy.uint16)
+    numpy.testing.assert_array_equal(decoded, expected)
+
+
+def test_lasso_remove_with_packed_bitmask_only_removes_target_label():
+    s = pandas.Series(["Spain", "Italy", None, "Spain"], name="country")
+    cat = Category(values=s, label_list=["Italy", "Spain"])  # Italy=1, Spain=2
+
+    xyz = numpy.zeros((4, 3), dtype=numpy.float32)
+    w = Scatter3dWidget(xyz=xyz, category=cat)
+
+    # select indices [0,1,3] and remove Spain
+    w.lasso_mask_t = pack_mask_big([0, 1, 3], n=4)
+    w.lasso_request_t = {
+        "kind": "lasso_commit",
+        "op": "remove",
+        "label": "Spain",
+        "request_id": 2,
+    }
+
+    assert w.lasso_result_t["status"] == "ok"
+    decoded = decode_u16(w.coded_values_t)
+    expected = numpy.array([0, 1, 0, 0], dtype=numpy.uint16)
+    numpy.testing.assert_array_equal(decoded, expected)
+
+
+def test_lasso_mask_too_short_errors_and_state_unchanged():
+    s = pandas.Series(["Spain", "Italy", None, "Spain"], name="country")
+    cat = Category(values=s, label_list=["Italy", "Spain"])
+
+    xyz = numpy.zeros((4, 3), dtype=numpy.float32)
+    w = Scatter3dWidget(xyz=xyz, category=cat)
+
+    before = decode_u16(w.coded_values_t).copy()
+
+    w.lasso_mask_t = b""  # too short for N=4 (needs 1 byte)
+    w.lasso_request_t = {
+        "kind": "lasso_commit",
+        "op": "add",
+        "label": "Spain",
+        "request_id": 3,
+    }
+
+    assert w.lasso_result_t["status"] == "error"
+    after = decode_u16(w.coded_values_t)
+    numpy.testing.assert_array_equal(after, before)
+
+
+def test_lasso_unknown_label_errors_and_state_unchanged():
+    s = pandas.Series(["Spain", "Italy", None, "Spain"], name="country")
+    cat = Category(values=s, label_list=["Italy", "Spain"])
+
+    xyz = numpy.zeros((4, 3), dtype=numpy.float32)
+    w = Scatter3dWidget(xyz=xyz, category=cat)
+
+    before = decode_u16(w.coded_values_t).copy()
+
+    w.lasso_mask_t = pack_mask_big([0, 1], n=4)
+    w.lasso_request_t = {
+        "kind": "lasso_commit",
+        "op": "add",
+        "label": "Portugal",
+        "request_id": 4,
+    }
+
+    assert w.lasso_result_t["status"] == "error"
+    after = decode_u16(w.coded_values_t)
+    numpy.testing.assert_array_equal(after, before)

@@ -381,19 +381,11 @@ class Scatter3dWidget(anywidget.AnyWidget):
 
     # --- lasso round-trip channels ---
     # Dict message TS -> Python describing a committed lasso operation.
-    lasso_request_t = traitlets.Dict(
-        default_value={},
-        help=(
-            "TS->Python event message for lasso commit. "
-            "Set to a new dict each time to trigger observers."
-        ),
-    ).tag(sync=True)
-
+    lasso_request_t = traitlets.Dict(default_value={}).tag(sync=True)
+    # Packed bitmask, length ceil(N/8) bytes, bitorder="big".
+    lasso_mask_t = traitlets.Bytes(default_value=b"").tag(sync=True)
     # Dict message Python -> TS acknowledging the last request (ok/error).
-    lasso_result_t = traitlets.Dict(
-        default_value={},
-        help="Python->TS response message for the last lasso_request_t (ok/error).",
-    ).tag(sync=True)
+    lasso_result_t = traitlets.Dict(default_value={}).tag(sync=True)
 
     def __init__(self, xyz: numpy.ndarray, category: Category):
         super().__init__()
@@ -524,15 +516,119 @@ class Scatter3dWidget(anywidget.AnyWidget):
         return self.xyz.shape[0]
 
     def close(self):
-        """
-        detach callback to avoid keeping references around.
-        Many widget frameworks have their own close/dispose; if anywidget has one,
-        prefer overriding that hook instead.
-        """
+        # detach callback to avoid keeping references around.
         if self._category is not None and self._category_cb_id is not None:
             self._category.unsubscribe(self._category_cb_id)
             self._category_cb_id = None
         super().close()
+
+    def _label_to_code_map(self) -> dict[str, int]:
+        # labels_t[i] -> code i+1
+        return {lbl: i + 1 for i, lbl in enumerate(self.labels_t)}
+
+    def _unpack_mask(self, mask_bytes: bytes) -> numpy.ndarray:
+        """
+        Returns a boolean mask of length N (num_points).
+        Expects packed bits, bitorder='big', length >= ceil(N/8).
+        """
+        n = self.num_points
+        needed = (n + 7) // 8
+        if not isinstance(mask_bytes, (bytes, bytearray)):
+            raise ValueError("lasso_mask_t must be bytes")
+        if len(mask_bytes) < needed:
+            raise ValueError(
+                f"lasso_mask_t too short: got {len(mask_bytes)} bytes, need {needed} for N={n}"
+            )
+
+        b = numpy.frombuffer(mask_bytes, dtype=numpy.uint8, count=needed)
+        bits = numpy.unpackbits(b, bitorder="big")  # length = needed*8
+        return bits[:n].astype(bool, copy=False)
+
+    def _apply_lasso_mask_edit(self, op: str, code: int, mask: numpy.ndarray) -> int:
+        """
+        Apply add/remove using a boolean mask of length N.
+        Returns number of points actually changed.
+        """
+        if self._category is None:
+            raise RuntimeError("No category set")
+
+        if mask.dtype != numpy.bool_ or mask.shape != (self.num_points,):
+            raise ValueError("Internal error: mask must be bool with shape (N,)")
+
+        if code < 0 or code > 65535:
+            raise ValueError(f"Invalid code {code} (must fit uint16)")
+        if code == 0 and op == "add":
+            raise ValueError("Cannot add code 0 (reserved for missing/unassigned)")
+
+        old = self._category.coded_values
+        new = old.copy()
+
+        if op == "add":
+            changed = int(numpy.sum(new[mask] != numpy.uint16(code)))
+            new[mask] = numpy.uint16(code)
+        elif op == "remove":
+            # Only remove points currently in that label
+            to_zero = mask & (new == numpy.uint16(code))
+            changed = int(numpy.sum(to_zero))
+            new[to_zero] = numpy.uint16(0)
+        else:
+            raise ValueError(f"Unknown op: {op!r}")
+
+        # Update Category (will notify; widget callback syncs coded_values_t etc.)
+        self._category.set_coded_values(
+            coded_values=new,
+            label_list=self._category.label_list,
+            skip_copying_array=True,
+        )
+        return changed
+
+    @traitlets.observe("lasso_request_t")
+    def _on_lasso_request_t(self, change) -> None:
+        req = change.get("new", {})
+        if not req:
+            return
+
+        request_id = req.get("request_id")
+        res: dict[str, object] = {"request_id": request_id}
+
+        try:
+            if req.get("kind") != "lasso_commit":
+                raise ValueError(f"Unsupported kind: {req.get('kind')!r}")
+
+            op = req.get("op")
+            if op not in ("add", "remove"):
+                raise ValueError(f"Invalid op: {op!r}")
+
+            # resolve code from either explicit code or label
+            if "code" in req and req["code"] is not None:
+                code = int(req["code"])
+            else:
+                label = req.get("label")
+                if label is None:
+                    raise ValueError("Missing field: label (or code)")
+                label_s = str(label)
+                m = self._label_to_code_map()
+                if label_s not in m:
+                    raise ValueError(f"Unknown label: {label_s!r}")
+                code = m[label_s]
+
+            # unpack mask from bytes traitlet
+            mask = self._unpack_mask(self.lasso_mask_t)
+            num_selected = int(numpy.sum(mask))
+
+            changed = self._apply_lasso_mask_edit(op=op, code=code, mask=mask)
+
+            res.update(
+                {
+                    "status": "ok",
+                    "num_selected": num_selected,
+                    "num_changed": changed,
+                }
+            )
+        except Exception as e:
+            res.update({"status": "error", "message": str(e)})
+
+        self.lasso_result_t = res
 
 
 class OldScatter3dWidget(anywidget.AnyWidget):
