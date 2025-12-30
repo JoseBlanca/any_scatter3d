@@ -1,3 +1,5 @@
+import base64
+
 import numpy
 import pandas
 
@@ -83,7 +85,9 @@ def test_lasso_add_with_packed_bitmask():
     w = Scatter3dWidget(xyz=xyz, category=cat)
 
     # select indices [1,2]
-    w.lasso_mask_t = pack_mask_big([1, 2], n=4)
+    mask_bytes = pack_mask_big([1, 2], n=4)
+    w.lasso_mask_t = base64.b64encode(mask_bytes).decode("ascii")
+
     w.lasso_request_t = {
         "kind": "lasso_commit",
         "op": "add",
@@ -105,7 +109,9 @@ def test_lasso_remove_with_packed_bitmask_only_removes_target_label():
     w = Scatter3dWidget(xyz=xyz, category=cat)
 
     # select indices [0,1,3] and remove Spain
-    w.lasso_mask_t = pack_mask_big([0, 1, 3], n=4)
+    mask_bytes = pack_mask_big([0, 1, 3], n=4)
+    w.lasso_mask_t = base64.b64encode(mask_bytes).decode("ascii")
+
     w.lasso_request_t = {
         "kind": "lasso_commit",
         "op": "remove",
@@ -150,7 +156,9 @@ def test_lasso_unknown_label_errors_and_state_unchanged():
 
     before = decode_u16(w.coded_values_t).copy()
 
-    w.lasso_mask_t = pack_mask_big([0, 1], n=4)
+    mask_bytes = pack_mask_big([0, 1], n=4)
+    w.lasso_mask_t = base64.b64encode(mask_bytes).decode("ascii")
+
     w.lasso_request_t = {
         "kind": "lasso_commit",
         "op": "add",
