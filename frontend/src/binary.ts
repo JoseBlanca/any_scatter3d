@@ -27,6 +27,19 @@ function requireMultipleOf(byteLength: number, n: number, what: string): void {
 	}
 }
 
+export function uint8ArrayToBase64(u8: Uint8Array): string {
+	// Avoid call stack / argument limits on large arrays by chunking.
+	let bin = "";
+	const CHUNK = 0x8000;
+
+	for (let i = 0; i < u8.length; i += CHUNK) {
+		const slice = u8.subarray(i, i + CHUNK);
+		bin += String.fromCharCode(...slice);
+	}
+
+	return btoa(bin);
+}
+
 function alignedViewOrCopy<T>(
 	u8: Uint8Array,
 	bytesPerElement: number,

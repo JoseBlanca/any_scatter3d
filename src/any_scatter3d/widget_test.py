@@ -12,7 +12,7 @@ def _():
     import numpy as np
     import pandas
 
-    num_points = 100
+    num_points = 10000
 
     points = np.random.randn(num_points, 3)
     species_list = ['species1', 'species2', 'species3']
@@ -20,14 +20,13 @@ def _():
     species = Category(pandas.Series(species, name='species'))
 
     w = Scatter3dWidget(xyz=points, category=species)
-    w.count = 100
     w
-    return (w,)
+    return (species,)
 
 
 @app.cell
-def _(w):
-    print(w.category)
+def _(species):
+    print(species.values.value_counts())
     return
 
 

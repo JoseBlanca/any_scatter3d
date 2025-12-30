@@ -5,6 +5,7 @@ from enum import Enum
 from collections import OrderedDict
 from typing import Any, Callable
 import weakref
+import base64
 
 import anywidget
 import traitlets
@@ -382,8 +383,8 @@ class Scatter3dWidget(anywidget.AnyWidget):
     # --- lasso round-trip channels ---
     # Dict message TS -> Python describing a committed lasso operation.
     lasso_request_t = traitlets.Dict(default_value={}).tag(sync=True)
-    # Packed bitmask, length ceil(N/8) bytes, bitorder="big".
-    lasso_mask_t = traitlets.Bytes(default_value=b"").tag(sync=True)
+    # Packed bitmask encoded as base64 string (JSON-friendly).
+    lasso_mask_t = traitlets.Unicode(default_value="").tag(sync=True)
     # Dict message Python -> TS acknowledging the last request (ok/error).
     lasso_result_t = traitlets.Dict(default_value={}).tag(sync=True)
 
@@ -526,22 +527,38 @@ class Scatter3dWidget(anywidget.AnyWidget):
         # labels_t[i] -> code i+1
         return {lbl: i + 1 for i, lbl in enumerate(self.labels_t)}
 
-    def _unpack_mask(self, mask_bytes: bytes) -> numpy.ndarray:
+    def _unpack_mask(self, mask_payload) -> numpy.ndarray:
         """
-        Returns a boolean mask of length N (num_points).
+        Returns boolean mask of length N (num_points).
         Expects packed bits, bitorder='big', length >= ceil(N/8).
+
+        mask_payload may be:
+          - base64 str (from frontend via JSON), or
+          - bytes/bytearray (if a binary channel is used)
         """
+
         n = self.num_points
         needed = (n + 7) // 8
-        if not isinstance(mask_bytes, (bytes, bytearray)):
-            raise ValueError("lasso_mask_t must be bytes")
+
+        if isinstance(mask_payload, str):
+            # tolerate empty string
+            if mask_payload == "":
+                raise ValueError("lasso_mask_t is empty")
+            mask_bytes = base64.b64decode(mask_payload)
+        elif isinstance(mask_payload, (bytes, bytearray)):
+            mask_bytes = bytes(mask_payload)
+        else:
+            raise ValueError(
+                f"lasso_mask_t must be base64 str or bytes, got {type(mask_payload)}"
+            )
+
         if len(mask_bytes) < needed:
             raise ValueError(
                 f"lasso_mask_t too short: got {len(mask_bytes)} bytes, need {needed} for N={n}"
             )
 
         b = numpy.frombuffer(mask_bytes, dtype=numpy.uint8, count=needed)
-        bits = numpy.unpackbits(b, bitorder="big")  # length = needed*8
+        bits = numpy.unpackbits(b, bitorder="big")
         return bits[:n].astype(bool, copy=False)
 
     def _apply_lasso_mask_edit(self, op: str, code: int, mask: numpy.ndarray) -> int:

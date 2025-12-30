@@ -20,6 +20,7 @@ import {
 } from "./interaction";
 import { createControlBar, renderControlBar, DEFAULT_UI_CONFIG } from "./ui";
 import { createThreeScene } from "./three_scene";
+import { uint8ArrayToBase64 } from "./binary";
 
 const RESIZE_THRESHOLD_PX = 2;
 
@@ -189,16 +190,12 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		const label = bar.labelSelect.value;
 		if (!label) return;
 
-		// Build packed-bit mask for N points
+		const op = state.mode.operation;
+		const requestId = requestCounter++;
 		const mask = three.selectMaskInLasso(polygonNdc);
 		if (mask.length === 0) return;
 
-		const op = state.mode.operation;
-		const requestId = requestCounter++;
-
-		// Set bytes first, then request dict (the dict is the "event trigger")
-		model.set(TRAITS.lassoMask, mask);
-
+		model.set(TRAITS.lassoMask, uint8ArrayToBase64(mask));
 		const req: LassoRequest = {
 			kind: "lasso_commit",
 			op,
@@ -206,7 +203,6 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 			request_id: requestId,
 		};
 		model.set(TRAITS.lassoRequest, req);
-
 		model.save_changes();
 	}
 
