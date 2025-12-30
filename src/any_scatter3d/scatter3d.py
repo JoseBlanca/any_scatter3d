@@ -1,9 +1,10 @@
 import os
 from pathlib import Path
-from itertools import cycle
+from itertools import cycle, count
 from enum import Enum
 from collections import OrderedDict
-from typing import Any
+from typing import Any, Callable
+import weakref
 
 import anywidget
 import traitlets
@@ -67,6 +68,9 @@ def _is_valid_color(color):
             )
 
 
+CategoryCallback = Callable[["Category", str], None]
+
+
 class Category:
     def __init__(
         self,
@@ -75,6 +79,9 @@ class Category:
         color_palette: dict[Any, tuple[float, float, float]] | None = None,
         missing_color: tuple[float, float, float] = MISSING_COLOR,
     ):
+        self._cb_id_gen = count(1)
+        self._callbacks: dict[int, weakref.ReferenceType] = {}
+
         self._native_values_dtype = values.dtype
         values = narwhals.from_native(values, series_only=True)
         self._narwhals_values_dtype = values.dtype
@@ -92,6 +99,29 @@ class Category:
 
         _is_valid_color(missing_color)
         self._missing_color = missing_color
+
+    def subscribe(self, cb: CategoryCallback) -> int:
+        cb_id = next(self._cb_id_gen)
+        try:
+            ref = weakref.WeakMethod(cb)  # bound method
+        except TypeError:
+            ref = weakref.ref(cb)  # function
+        self._callbacks[cb_id] = ref
+        return cb_id
+
+    def unsubscribe(self, cb_id: int) -> None:
+        self._callbacks.pop(cb_id, None)
+
+    def _notify(self, event: str) -> None:
+        dead = []
+        for cb_id, ref in self._callbacks.items():
+            cb = ref()
+            if cb is None:
+                dead.append(cb_id)
+            else:
+                cb(self, event)
+        for cb_id in dead:
+            self._callbacks.pop(cb_id, None)
 
     @staticmethod
     def _get_unique_labels_in_values(values):
@@ -203,6 +233,7 @@ class Category:
             new_values[old_values == old_code] = new_code
         self._coded_values = new_values
         self._label_coding = new_label_coding
+        self._notify("label_list")
 
     def set_coded_values(
         self,
@@ -233,6 +264,7 @@ class Category:
             coded_values = coded_values.copy(order="K")
 
         self._coded_values = coded_values
+        self._notify("coded_values")
 
     @property
     def coded_values(self):
@@ -266,6 +298,7 @@ class Category:
                 color = next(default_colors)
             palette[label] = tuple(color)
         self._color_palette = palette
+        self._notify("palette")
 
     @property
     def color_palette(self):
@@ -363,16 +396,31 @@ class Scatter3dWidget(anywidget.AnyWidget):
     ).tag(sync=True)
 
     def __init__(self, xyz: numpy.ndarray, category: Category):
+        super().__init__()
+        self._category_cb_id: int | None = None
+
         if category is not None and xyz.shape[0] != category.num_values:
             raise ValueError(
                 f"The number of points ({xyz.shape[0]}) should match "
-                f"the number of values in the category: {self.category.num_values}"
+                f"the number of values in the category: {category.num_values}"
             )
+
+        # Keep a stable callback object so unsubscribe works.
+        self._category_cb = self._on_category_changed
 
         self._xyz = None
         self._category = None
         self.xyz = xyz
         self.category = category
+
+    def _on_category_changed(self, category: Category, event: str) -> None:
+        """
+        Called when Category mutates.
+        """
+        # Sanity: ignore stale callbacks (if category replaced)
+        if category is not self._category:
+            return
+        self._sync_traitlets_from_category()
 
     @staticmethod
     def _pack_xyz_float32_c(xyz: numpy.ndarray) -> tuple[numpy.ndarray, bytes]:
@@ -415,21 +463,76 @@ class Scatter3dWidget(anywidget.AnyWidget):
 
     xyz = property(_get_xyz, _set_xyz)
 
+    @staticmethod
+    def _pack_u16_c(arr: numpy.ndarray) -> bytes:
+        arr_u16 = numpy.asarray(arr, dtype=numpy.uint16, order="C")
+        if not arr_u16.flags["C_CONTIGUOUS"]:
+            arr_u16 = numpy.ascontiguousarray(arr_u16)
+        return arr_u16.tobytes(order="C")
+
+    def _sync_traitlets_from_category(self) -> None:
+        """
+        Push the Category state into synced transport traitlets.
+        Assumes self._xyz and self._category are both set and consistent in length.
+        """
+        if self._category is None:
+            raise RuntimeError("The category should be set")
+
+        cat = self._category
+
+        # labels_t must be JSON-friendly; enforce str
+        labels = [str(lbl) for lbl in cat.label_list]
+        self.labels_t = labels
+
+        # coded values: uint16 bytes, length N
+        coded = cat.coded_values
+        if coded.shape[0] != self.num_points:
+            raise RuntimeError(
+                f"Category has {coded.shape[0]} values but xyz has {self.num_points} points"
+            )
+        self.coded_values_t = self._pack_u16_c(coded)
+
+        # colors aligned with labels order
+        # Category stores palette keyed by original labels; we reconstruct in label_list order.
+        palette = cat.color_palette  # label -> (r,g,b)
+        self.colors_t = [list(map(float, palette[lbl])) for lbl in cat.label_list]
+
+        # missing color
+        self.missing_color_t = list(map(float, cat.missing_color))
+
     def _get_category(self):
         return self._category
 
-    def _set_category(self, category):
-        if category.num_values != self.num_points:
+    def _set_category(self, category: Category) -> None:
+        if self._xyz is not None and category.num_values != self.num_points:
             raise ValueError(
-                f"The number of values in the category ({category.num_values}) should match the number of points {self.num_points}"
+                f"The number of values in the category ({category.num_values}) "
+                f"should match the number of points {self.num_points}"
             )
+        if self._category is not None and self._category_cb_id is not None:
+            self._category.unsubscribe(self._category_cb_id)
+
         self._category = category
+        # Subscribe to new category
+        self._category_cb_id = category.subscribe(self._on_category_changed)
+        self._sync_traitlets_from_category()
+
+    category = property(_get_category, _set_category)
 
     @property
     def num_points(self):
         return self.xyz.shape[0]
 
-    category = property(_get_category, _set_category)
+    def close(self):
+        """
+        detach callback to avoid keeping references around.
+        Many widget frameworks have their own close/dispose; if anywidget has one,
+        prefer overriding that hook instead.
+        """
+        if self._category is not None and self._category_cb_id is not None:
+            self._category.unsubscribe(self._category_cb_id)
+            self._category_cb_id = None
+        super().close()
 
 
 class OldScatter3dWidget(anywidget.AnyWidget):
