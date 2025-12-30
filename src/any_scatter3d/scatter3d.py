@@ -27,7 +27,7 @@ MISSING_CATEGORY_VALUE = "Unassigned"
 
 DARK_GREY = "#111111"
 WHITE = "#ffffff"
-DEFAULT_POINT_SIZE = 0.05
+DEFAULT_POINT_SIZE = 0.15
 TAB20_COLORS_RGB = [
     (0.12156862745098039, 0.4666666666666667, 0.7058823529411765),
     (0.6823529411764706, 0.7803921568627451, 0.9098039215686274),
@@ -394,6 +394,11 @@ class Scatter3dWidget(anywidget.AnyWidget):
     # Dict message Python -> TS acknowledging the last request (ok/error).
     lasso_result_t = traitlets.Dict(default_value={}).tag(sync=True)
 
+    point_size_t = traitlets.Float(
+        default_value=DEFAULT_POINT_SIZE,
+        help="Point size for rendering (three.js PointsMaterial.size).",
+    ).tag(sync=True)
+
     def __init__(self, xyz: numpy.ndarray, category: Category):
         super().__init__()
         self._category_cb_id: int | None = None
@@ -652,3 +657,14 @@ class Scatter3dWidget(anywidget.AnyWidget):
             res.update({"status": "error", "message": str(e)})
 
         self.lasso_result_t = res
+
+    def _get_point_size(self) -> float:
+        return float(self.point_size_t)
+
+    def _set_point_size(self, value: float) -> None:
+        v = float(value)
+        if not numpy.isfinite(v) or v <= 0:
+            raise ValueError("point_size must be a finite positive number")
+        self.point_size_t = v
+
+    point_size = property(_get_point_size, _set_point_size)
