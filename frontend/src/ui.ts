@@ -1,3 +1,5 @@
+// frontend/src/ui.ts
+
 export type UiConfig = {
 	controlBar: {
 		gapPx: number;
@@ -34,12 +36,11 @@ export const DEFAULT_UI_CONFIG: UiConfig = {
 
 export type ControlBar = {
 	el: HTMLElement;
-	categorySelect: HTMLSelectElement;
 	rotateBtn: HTMLButtonElement;
 	lassoBtn: HTMLButtonElement;
 	addBtn: HTMLButtonElement;
 	removeBtn: HTMLButtonElement;
-	valueSelect: HTMLSelectElement;
+	labelSelect: HTMLSelectElement;
 };
 
 export function createControlBar(
@@ -47,8 +48,6 @@ export function createControlBar(
 	cfg: UiConfig,
 ): ControlBar {
 	toolbar.style.gap = `${cfg.controlBar.gapPx}px`;
-
-	const categorySelect = document.createElement("select");
 
 	const rotateBtn = document.createElement("button");
 	rotateBtn.textContent = "Rotate";
@@ -62,7 +61,7 @@ export function createControlBar(
 	const removeBtn = document.createElement("button");
 	removeBtn.textContent = "Remove";
 
-	const valueSelect = document.createElement("select");
+	const labelSelect = document.createElement("select");
 
 	for (const b of [rotateBtn, lassoBtn, addBtn, removeBtn]) {
 		b.style.padding = cfg.buttons.padding;
@@ -72,21 +71,19 @@ export function createControlBar(
 		b.style.cursor = "pointer";
 	}
 
-	toolbar.appendChild(categorySelect);
 	toolbar.appendChild(rotateBtn);
 	toolbar.appendChild(lassoBtn);
 	toolbar.appendChild(addBtn);
 	toolbar.appendChild(removeBtn);
-	toolbar.appendChild(valueSelect);
+	toolbar.appendChild(labelSelect);
 
 	return {
 		el: toolbar,
-		categorySelect,
 		rotateBtn,
 		lassoBtn,
 		addBtn,
 		removeBtn,
-		valueSelect,
+		labelSelect,
 	};
 }
 
@@ -121,7 +118,7 @@ export function renderControlBar(bar: ControlBar, cfg: UiConfig, s: UiState) {
 	// show/hide lasso-only controls
 	bar.addBtn.style.display = inLasso ? "" : "none";
 	bar.removeBtn.style.display = inLasso ? "" : "none";
-	bar.valueSelect.style.display = inLasso ? "" : "none";
+	bar.labelSelect.style.display = inLasso ? "" : "none";
 
 	// active/inactive styles
 	styleBtn(bar.rotateBtn, cfg, s.mode === "rotate");

@@ -2,27 +2,26 @@ import type { PointerInfo } from "./view";
 
 const MIN_LASSO_DIST_BETWEEN_POINTS = 2;
 
+export type LassoOp = "add" | "remove";
+
 export type InteractionMode =
 	| { kind: "rotate" }
-	| { kind: "lasso"; operation: "add" | "remove" };
+	| { kind: "lasso"; operation: LassoOp };
 
 export type LassoPoint = {
+	// normalized device coordinates (-1..1), used for selection against projected points
 	normDevCoordX: number;
 	normDevCoordY: number;
+
+	// css pixels, used only for drawing the overlay
 	cssX: number;
 	cssY: number;
 };
 
 export type LassoState =
 	| { kind: "idle" }
-	| {
-			kind: "drawing";
-			points: LassoPoint[];
-	  }
-	| {
-			kind: "ready";
-			points: LassoPoint[];
-	  };
+	| { kind: "drawing"; points: LassoPoint[] }
+	| { kind: "ready"; points: LassoPoint[] };
 
 export type InteractionState = {
 	mode: InteractionMode;
@@ -33,6 +32,8 @@ export type InteractionState = {
 	pixelWidth: number;
 	pixelHeight: number;
 };
+
+export type PolygonNdc = { x: number; y: number }[];
 
 export function createInteractionState(): InteractionState {
 	return {
@@ -52,11 +53,13 @@ export function setMode(state: InteractionState, next: InteractionMode) {
 
 export function onPointerMove(state: InteractionState, p: PointerInfo) {
 	state.lastPointer = p;
+
 	if (state.mode.kind !== "lasso") return;
 	if (state.lasso.kind !== "drawing") return;
 
 	const pts = state.lasso.points;
 	const last = pts[pts.length - 1];
+
 	const dx = p.cssX - last.cssX;
 	const dy = p.cssY - last.cssY;
 	const minDistPx = MIN_LASSO_DIST_BETWEEN_POINTS;
@@ -73,6 +76,7 @@ export function onPointerMove(state: InteractionState, p: PointerInfo) {
 export function onPointerDown(state: InteractionState, p: PointerInfo) {
 	if (state.mode.kind !== "lasso") return;
 	if (!p.isInside) return;
+
 	state.lasso = {
 		kind: "drawing",
 		points: [
@@ -96,17 +100,25 @@ export function cancelLasso(state: InteractionState) {
 	state.lasso = { kind: "idle" };
 }
 
-export function commitLasso(state: InteractionState): LassoPoint[] | null {
-	// IMPORTANT: do not apply add/remove here yet; just “commit” the draft.
-	// Later this will compute selected ids and send to Python.
+export function commitLasso(state: InteractionState): PolygonNdc | null {
 	if (state.mode.kind !== "lasso") return null;
 	if (state.lasso.kind !== "ready") return null;
 
-	const polygon = state.lasso.points;
-	// TODO later: send to python: {op: state.mode.op, polygon}
+	const pts = state.lasso.points;
+	if (pts.length < 3) {
+		state.lasso = { kind: "idle" };
+		return null;
+	}
+
+	const polygon: PolygonNdc = pts.map((p) => ({
+		x: p.normDevCoordX,
+		y: p.normDevCoordY,
+	}));
+
 	state.lasso = { kind: "idle" };
 	return polygon;
 }
+
 export function drawOverlay(
 	state: InteractionState,
 	ctx: CanvasRenderingContext2D | null,

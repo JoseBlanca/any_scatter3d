@@ -2,16 +2,7 @@ export type BytesLike =
 	| ArrayBuffer
 	| Uint8Array
 	| DataView
-	| { buffer: ArrayBuffer } // covers some widget wrappers
-	| string; // fallback: base64 (if your framework serializes bytes that way)
-
-function base64ToUint8Array(b64: string): Uint8Array {
-	// Browser-safe base64 decode
-	const bin = atob(b64);
-	const out = new Uint8Array(bin.length);
-	for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-	return out;
-}
+	| { buffer: ArrayBuffer }; // covers some widget wrappers
 
 export function bytesToUint8Array(x: unknown): Uint8Array {
 	if (x instanceof Uint8Array) return x;
@@ -25,28 +16,115 @@ export function bytesToUint8Array(x: unknown): Uint8Array {
 		if (b instanceof ArrayBuffer) return new Uint8Array(b);
 	}
 
-	if (typeof x === "string") {
-		return base64ToUint8Array(x);
+	throw new Error(
+		`Expected bytes-like (Uint8Array | ArrayBuffer | DataView | {buffer:ArrayBuffer}), got: ${typeof x}`,
+	);
+}
+
+function requireMultipleOf(byteLength: number, n: number, what: string): void {
+	if (byteLength % n !== 0) {
+		throw new Error(`${what} bytes length ${byteLength} not divisible by ${n}`);
+	}
+}
+
+function alignedViewOrCopy<T>(
+	u8: Uint8Array,
+	bytesPerElement: number,
+	makeView: (buf: ArrayBuffer, offset: number, length: number) => T,
+): T {
+	const byteOffset = u8.byteOffset;
+	const byteLength = u8.byteLength;
+
+	if (byteLength === 0) {
+		throw new Error("Expected non-empty bytes");
 	}
 
-	return new Uint8Array(0);
+	// If aligned, zero-copy view.
+	if (byteOffset % bytesPerElement === 0) {
+		return makeView(u8.buffer, byteOffset, byteLength / bytesPerElement);
+	}
+
+	// If not aligned, copy.
+	const copy = new Uint8Array(byteLength);
+	copy.set(u8);
+	return makeView(copy.buffer, 0, byteLength / bytesPerElement);
+}
+
+export function bytesToUint16ArrayLE(x: unknown): Uint16Array {
+	const u8 = bytesToUint8Array(x);
+	requireMultipleOf(u8.byteLength, 2, "uint16");
+	return alignedViewOrCopy(
+		u8,
+		2,
+		(buf, off, len) => new Uint16Array(buf, off, len),
+	);
 }
 
 export function bytesToUint32ArrayLE(x: unknown): Uint32Array {
 	const u8 = bytesToUint8Array(x);
-	const byteOffset = u8.byteOffset;
-	const byteLength = u8.byteLength;
+	requireMultipleOf(u8.byteLength, 4, "uint32");
+	return alignedViewOrCopy(
+		u8,
+		4,
+		(buf, off, len) => new Uint32Array(buf, off, len),
+	);
+}
 
-	if (byteLength % 4 !== 0) {
-		throw new Error(`codes bytes length ${byteLength} not divisible by 4`);
+export function bytesToFloat32ArrayLE(x: unknown): Float32Array {
+	const u8 = bytesToUint8Array(x);
+	requireMultipleOf(u8.byteLength, 4, "float32");
+	return alignedViewOrCopy(
+		u8,
+		4,
+		(buf, off, len) => new Float32Array(buf, off, len),
+	);
+}
+
+// ------------------------------
+// Packed bitmask helpers (big-endian bits)
+// ------------------------------
+
+// Python side uses np.unpackbits(..., bitorder="big") and takes the first N bits.
+// bit i is stored at:
+//   byte = i >> 3
+//   bit  = 7 - (i & 7)
+export function packedMaskLength(nPoints: number): number {
+	if (!Number.isInteger(nPoints) || nPoints < 0) {
+		throw new Error(`invalid nPoints: ${nPoints}`);
+	}
+	return (nPoints + 7) >> 3;
+}
+
+export function createPackedMaskBig(nPoints: number): Uint8Array {
+	return new Uint8Array(packedMaskLength(nPoints));
+}
+
+export function clearPackedMask(mask: Uint8Array): void {
+	mask.fill(0);
+}
+
+export function setPackedMaskBitBig(mask: Uint8Array, index: number): void {
+	if (!Number.isInteger(index)) {
+		throw new Error(`index must be an integer, got: ${index}`);
+	}
+	if (index < 0) {
+		throw new Error(`index out of range: ${index}`);
 	}
 
-	// If aligned, zero-copy view. If not aligned, copy.
-	if (byteOffset % 4 === 0) {
-		return new Uint32Array(u8.buffer, byteOffset, byteLength / 4);
+	const byte = index >> 3;
+	if (byte < 0 || byte >= mask.length) {
+		throw new Error(
+			`index out of range: ${index} (byte=${byte}, mask.length=${mask.length})`,
+		);
 	}
+	const bit = 7 - (index & 7);
+	mask[byte] |= 1 << bit;
+}
 
-	const copy = new Uint8Array(byteLength);
-	copy.set(u8);
-	return new Uint32Array(copy.buffer);
+export function getPackedMaskBitBig(mask: Uint8Array, index: number): boolean {
+	if (!Number.isInteger(index) || index < 0) return false;
+	const byte = index >> 3;
+	if (byte < 0 || byte >= mask.length) return false;
+	const bit = 7 - (index & 7);
+	return (mask[byte] & (1 << bit)) !== 0;
 }

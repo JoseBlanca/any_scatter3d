@@ -1,4 +1,5 @@
-import type { WidgetModel } from "./model";
+import type { WidgetModel, LassoRequest, LassoResult } from "./model";
+import { TRAITS } from "./model";
 import {
 	createWidgetRoot,
 	observeSize,
@@ -15,18 +16,44 @@ import {
 	cancelLasso,
 	commitLasso,
 	drawOverlay,
-	LassoPoint,
-	InteractionState,
+	type InteractionState,
 } from "./interaction";
 import { createControlBar, renderControlBar, DEFAULT_UI_CONFIG } from "./ui";
 import { createThreeScene } from "./three_scene";
-import { bytesToUint32ArrayLE } from "./binary";
 
 const RESIZE_THRESHOLD_PX = 2;
 
-type LabelsForCategories = Record<string, string[]>;
-type CodedCategories = Record<string, unknown>; // values are "bytes-like"
-type CategoriesColors = Record<string, number[][]>; // list of [r,g,b]
+function populateLabelSelect(
+	select: HTMLSelectElement,
+	labels: string[],
+	preferred?: string,
+) {
+	select.innerHTML = "";
+
+	for (const label of labels) {
+		const opt = document.createElement("option");
+		opt.value = label;
+		opt.textContent = label;
+		select.appendChild(opt);
+	}
+
+	if (select.options.length === 0) return;
+
+	if (
+		preferred &&
+		Array.from(select.options).some((o) => o.value === preferred)
+	) {
+		select.value = preferred;
+	} else {
+		select.selectedIndex = 0;
+	}
+}
+
+function getLabelsFromModel(model: WidgetModel): string[] {
+	const x = model.get(TRAITS.labels);
+	if (!Array.isArray(x)) return [];
+	return x.map((v) => String(v));
+}
 
 export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 	const cleanupPrev = (el as any).__any_scatter3d_cleanup as
@@ -38,14 +65,15 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 
 	const abortController = new AbortController();
 
-	// Canvas + interaction state
 	// --- 3D layer (three.js) ---
 	const three = createThreeScene(canvasHost, model);
 	three.domElement.style.position = "absolute";
 	three.domElement.style.inset = "0";
 	three.domElement.style.zIndex = "1"; // below overlay
+
+	// Initial data push
 	three.setPointsFromModel();
-	three.setPointSizeFromModel();
+	three.setColorsFromModel();
 
 	// --- 2D overlay canvas (lasso) ---
 	const { canvas, resizeCanvas } = createOverlayCanvas(canvasHost);
@@ -53,41 +81,35 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 
 	const state = createInteractionState();
 
-	const r = canvasHost.getBoundingClientRect();
-	if (r.width > 0 && r.height > 0) {
-		three.setSize(
-			Math.round(r.width),
-			Math.round(r.height),
-			window.devicePixelRatio || 1,
-		);
-	}
-	const cssW = Math.round(r.width);
-	const cssH = Math.round(r.height);
-	if (cssW > 0 && cssH > 0) {
-		const { devicePixelRatio, width, height } = resizeCanvas(cssW, cssH);
-		state.dpr = devicePixelRatio;
-		state.pixelWidth = width;
-		state.pixelHeight = height;
-		three.setSize(cssW, cssH, devicePixelRatio);
+	// Initial sizing
+	{
+		const r = canvasHost.getBoundingClientRect();
+		const cssW = Math.round(r.width);
+		const cssH = Math.round(r.height);
+		if (cssW > 0 && cssH > 0) {
+			const { devicePixelRatio, width, height } = resizeCanvas(cssW, cssH);
+			state.dpr = devicePixelRatio;
+			state.pixelWidth = width;
+			state.pixelHeight = height;
+			three.setSize(cssW, cssH, devicePixelRatio);
+		}
 	}
 
-	three.setPointsFromModel();
-	three.setPointSizeFromModel();
-
+	// --- UI ---
 	const uiCfg = DEFAULT_UI_CONFIG;
 	const bar = createControlBar(toolbar, uiCfg);
 
-	// initial UI state from interaction state
 	function syncUiFromState() {
 		const uiState = {
 			mode: state.mode.kind,
 			operation: state.mode.kind === "lasso" ? state.mode.operation : "add",
 		} as const;
+
 		renderControlBar(bar, uiCfg, uiState);
 
 		// Pointer routing:
 		// - Rotate: interact with three.js canvas (OrbitControls)
-		// - Lasso: interact with overlay canvas (your lasso code)
+		// - Lasso: interact with overlay canvas
 		if (uiState.mode === "rotate") {
 			three.domElement.style.pointerEvents = "auto";
 			canvas.style.pointerEvents = "none";
@@ -139,244 +161,104 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		{ signal: abortController.signal },
 	);
 
-	const labelsForCategories =
-		(model.get("labels_for_categories_t") as LabelsForCategories) ?? {};
-	function getLabelsForCategories(): LabelsForCategories {
-		return (model.get("labels_for_categories_t") as LabelsForCategories) ?? {};
+	function refreshLabelsUI() {
+		const labels = getLabelsFromModel(model);
+		const prev = bar.labelSelect.value;
+		populateLabelSelect(bar.labelSelect, labels, prev);
 	}
 
-	function populateCategorySelect(
-		select: HTMLSelectElement,
-		labelsForCategories: Record<string, string[]>,
-		preferred?: string,
-	) {
-		const categories = Object.keys(labelsForCategories).sort();
+	// initial labels
+	refreshLabelsUI();
 
-		select.innerHTML = "";
-		for (const category of categories) {
-			const opt = document.createElement("option");
-			opt.value = category;
-			opt.textContent = category;
-			select.appendChild(opt);
-		}
+	// -----------------------
+	// Lasso commit -> Python
+	// -----------------------
+	let requestCounter = 1;
 
-		// Pick a valid selection
-		if (categories.length === 0) return;
-
-		const wanted =
-			preferred && categories.includes(preferred) ? preferred : categories[0];
-		select.value = wanted;
-	}
-
-	function populateValueSelect(
-		select: HTMLSelectElement,
-		category: string,
-		labelsForCategories: Record<string, string[]>,
-		preferredCode?: string,
-	) {
-		select.innerHTML = "";
-		const labels = labelsForCategories[category];
-		if (!labels) return;
-
-		for (let i = 1; i < labels.length; i++) {
-			const opt = document.createElement("option");
-			opt.value = String(i); // code
-			opt.textContent = labels[i]; // label
-			select.appendChild(opt);
-		}
-
-		// Keep previous value if still valid; otherwise default to first option
-		if (select.options.length === 0) return;
-		if (
-			preferredCode &&
-			Array.from(select.options).some((o) => o.value === preferredCode)
-		) {
-			select.value = preferredCode;
-		} else {
-			select.selectedIndex = 0;
-		}
-	}
-
-	function refreshCategoriesUI() {
-		const labelsForCategories =
-			(model.get("labels_for_categories_t") as Record<string, string[]>) ?? {};
-
-		const prevCategory = bar.categorySelect.value;
-		const prevValueCode = bar.valueSelect.value;
-
-		populateCategorySelect(
-			bar.categorySelect,
-			labelsForCategories,
-			prevCategory,
-		);
-		populateValueSelect(
-			bar.valueSelect,
-			bar.categorySelect.value,
-			labelsForCategories,
-			prevValueCode,
-		);
-	}
-	bar.categorySelect.addEventListener(
-		"change",
-		() => {
-			const labelsForCategories = getLabelsForCategories();
-			populateValueSelect(
-				bar.valueSelect,
-				bar.categorySelect.value,
-				labelsForCategories,
-			);
-			applyColorsFromSelectedCategory();
-		},
-		{ signal: abortController.signal },
-	);
-
-	function applyColorsFromSelectedCategory() {
-		const category = bar.categorySelect.value;
-		if (!category) return;
-
-		const coded = (model.get("coded_categories_t") as CodedCategories) ?? {};
-		const palettes =
-			(model.get("categories_colors_t") as CategoriesColors) ?? {};
-
-		const codesBytes = coded[category];
-		const colorsForCodes = palettes[category];
-
-		if (!codesBytes || !colorsForCodes) return;
-
-		three.setColorsFromCategory(codesBytes, colorsForCodes);
-	}
-	refreshCategoriesUI();
-	applyColorsFromSelectedCategory();
-
-	const category = bar.categorySelect.value;
-
-	function applyCommittedLasso(args: {
-		model: import("./model").WidgetModel;
-		three: import("./three_scene").ThreeScene;
-		bar: any; // your UI object with dropdowns
+	function sendCommittedLasso(args: {
+		model: WidgetModel;
+		three: ReturnType<typeof createThreeScene>;
+		bar: typeof bar;
 		state: InteractionState;
-		polygon: LassoPoint[];
+		polygonNdc: { x: number; y: number }[];
 	}) {
-		const { model, three, bar, state, polygon } = args;
+		const { model, three, bar, state, polygonNdc } = args;
 
-		// Column (e.g. "country") and label (e.g. "Spain")
-		const categoryCol = bar.categorySelect.value;
-		const codeStr = bar.valueSelect.value;
-		if (!categoryCol || !codeStr) return;
+		if (state.mode.kind !== "lasso") return;
 
-		const codedAll = (model.get("coded_categories_t") ?? {}) as Record<
-			string,
-			unknown
-		>;
-		const labelsAll = (model.get("labels_for_categories_t") ?? {}) as Record<
-			string,
-			string[]
-		>;
-		const palettesAll = (model.get("categories_colors_t") ?? {}) as Record<
-			string,
-			number[][]
-		>;
+		const label = bar.labelSelect.value;
+		if (!label) return;
 
-		const codesBytesRaw = codedAll[categoryCol];
-		const labels = labelsAll[categoryCol];
-		const colorsForCodes = palettesAll[categoryCol];
+		// Build packed-bit mask for N points
+		const mask = three.selectMaskInLasso(polygonNdc);
+		if (mask.length === 0) return;
 
-		if (!codesBytesRaw || !labels || !colorsForCodes) return;
+		const op = state.mode.operation;
+		const requestId = requestCounter++;
 
-		// You are currently interpreting codes as Uint32Array in three_scene.ts:
-		//   const codes = new Uint32Array(bytesToUint8Array(codesBytes).buffer);
-		// so we must mutate as Uint32, not Uint8.
-		const codes32 = bytesToUint32ArrayLE(codesBytesRaw);
+		// Set bytes first, then request dict (the dict is the "event trigger")
+		model.set(TRAITS.lassoMask, mask);
 
-		const targetCode = Number.parseInt(codeStr, 10);
-		if (!Number.isFinite(targetCode)) return;
+		const req: LassoRequest = {
+			kind: "lasso_commit",
+			op,
+			label,
+			request_id: requestId,
+		};
+		model.set(TRAITS.lassoRequest, req);
 
-		const unassignedCode = 0;
-
-		// polygon points are already in NDC in your InteractionState
-		const polyNdc = polygon.map((p) => ({
-			x: p.normDevCoordX,
-			y: p.normDevCoordY,
-		}));
-
-		const indices = three.selectIndicesInLasso(polyNdc);
-		if (indices.length === 0) return;
-
-		let changed = false;
-		const op = state.mode.kind === "lasso" ? state.mode.operation : null;
-		if (!op) return;
-
-		if (op === "add") {
-			for (const idx of indices) {
-				if (codes32[idx] !== targetCode) {
-					codes32[idx] = targetCode;
-					changed = true;
-				}
-			}
-		} else {
-			for (const idx of indices) {
-				if (codes32[idx] === targetCode) {
-					codes32[idx] = unassignedCode;
-					changed = true;
-				}
-			}
-		}
-
-		if (!changed) return;
-
-		// Create a byte view of the (possibly non-zero-offset) Uint32Array
-		const u8 = new Uint8Array(
-			codes32.buffer,
-			codes32.byteOffset,
-			codes32.byteLength,
-		);
-
-		// Recolor immediately (local)
-		three.setColorsFromCategory(u8, colorsForCodes);
-
-		// Commit to Python
-		const u8copy = new Uint8Array(u8); // copy to avoid sharing backing store
-
-		const buf = u8copy.buffer.slice(
-			u8copy.byteOffset,
-			u8copy.byteOffset + u8copy.byteLength,
-		);
-
-		const payload = new DataView(buf);
-		model.set("coded_categories_t", { ...codedAll, [categoryCol]: payload });
 		model.save_changes();
 	}
 
-	const onPointsChange = () => three.setPointsFromModel();
-	const onPointSizeChange = () => three.setPointSizeFromModel();
-	const onPointsDtypeChange = () => three.setPointsFromModel();
-	const onPointsStrideChange = () => three.setPointsFromModel();
-	const onLabelsChange = () => {
-		refreshCategoriesUI();
-		applyColorsFromSelectedCategory();
-	};
-	const onCodedCategoriesChange = () => applyColorsFromSelectedCategory();
-	const onCategoriesColorsChange = () => applyColorsFromSelectedCategory();
+	// -----------------------
+	// Model -> view updates
+	// -----------------------
 
-	model.on("change:points_t", onPointsChange);
-	model.on("change:point_size_t", onPointSizeChange);
-	model.on("change:points_dtype_t", onPointsDtypeChange);
-	model.on("change:points_stride_t", onPointsStrideChange);
-	model.on("change:labels_for_categories_t", onLabelsChange);
-	model.on("change:coded_categories_t", onCodedCategoriesChange);
-	model.on("change:categories_colors_t", onCategoriesColorsChange);
+	const onXYZChange = () => {
+		three.setPointsFromModel();
+		// points changed implies we should recolor too
+		three.setColorsFromModel();
+	};
+
+	const onColorsRelatedChange = () => {
+		// coded_values_t or palette changed
+		three.setColorsFromModel();
+	};
+
+	const onLabelsChange = () => {
+		refreshLabelsUI();
+		// labels affect mapping code->color index; recolor defensively
+		three.setColorsFromModel();
+	};
+
+	const onLassoResultChange = () => {
+		const res = model.get(TRAITS.lassoResult) as LassoResult | unknown;
+		if (!res || typeof res !== "object") return;
+		const status = (res as any).status;
+		if (status === "error") {
+			// Hard visible signal: console + could add a toast later
+			// Important: don't swallow this silently.
+			console.error("Lasso error:", (res as any).message ?? res);
+		}
+	};
+
+	model.on(`change:${TRAITS.xyzBytes}`, onXYZChange);
+	model.on(`change:${TRAITS.codedValues}`, onColorsRelatedChange);
+	model.on(`change:${TRAITS.colors}`, onColorsRelatedChange);
+	model.on(`change:${TRAITS.missingColor}`, onColorsRelatedChange);
+	model.on(`change:${TRAITS.labels}`, onLabelsChange);
+	model.on(`change:${TRAITS.lassoResult}`, onLassoResultChange);
 
 	// Make root focusable so Enter/Escape works
 	root.tabIndex = 0;
 
-	// Pointer events
+	// Pointer events (overlay canvas in lasso mode)
 	canvas.addEventListener(
 		"pointerdown",
 		(e) => {
 			const p = pointerInfoFromEvent(e, canvas);
 			if (!p.isInside) return;
 
-			// In lasso mode, start lasso and focus root for keyboard confirm/cancel
 			if (state.mode.kind === "lasso") {
 				root.focus();
 				canvas.setPointerCapture(e.pointerId);
@@ -424,9 +306,15 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 				syncUiFromState();
 				e.preventDefault();
 			} else if (e.key === "Enter") {
-				const polygon = commitLasso(state);
-				if (polygon) {
-					applyCommittedLasso({ model, three, bar, state, polygon });
+				const polygonNdc = commitLasso(state);
+				if (polygonNdc) {
+					sendCommittedLasso({
+						model,
+						three,
+						bar,
+						state,
+						polygonNdc,
+					});
 				}
 				syncUiFromState();
 				e.preventDefault();
@@ -460,7 +348,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		three.setSize(cssW, cssH, devicePixelRatio);
 	});
 
-	// RAF loop: draw overlay (later: render 3D + overlay)
+	// RAF loop: render 3D + overlay
 	let rafId = 0;
 	const frame = () => {
 		three.render();
@@ -469,25 +357,22 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 	};
 	rafId = requestAnimationFrame(frame);
 
-	// TEMP: set mode manually for now (later you’ll add UI controls)
-	// setMode(state, { kind: "lasso", op: "add" });
-
 	const cleanup = () => {
 		abortController.abort();
 
-		model.off("change:points_t", onPointsChange);
-		model.off("change:point_size_t", onPointSizeChange);
-		model.off("change:points_dtype_t", onPointsDtypeChange);
-		model.off("change:points_stride_t", onPointsStrideChange);
-		model.off("change:labels_for_categories_t", onLabelsChange);
-		model.off("change:coded_categories_t", onCodedCategoriesChange);
-		model.off("change:categories_colors_t", onCategoriesColorsChange);
+		model.off(`change:${TRAITS.xyzBytes}`, onXYZChange);
+		model.off(`change:${TRAITS.codedValues}`, onColorsRelatedChange);
+		model.off(`change:${TRAITS.colors}`, onColorsRelatedChange);
+		model.off(`change:${TRAITS.missingColor}`, onColorsRelatedChange);
+		model.off(`change:${TRAITS.labels}`, onLabelsChange);
+		model.off(`change:${TRAITS.lassoResult}`, onLassoResultChange);
 
 		stopObserving();
 		cancelAnimationFrame(rafId);
 		three.dispose();
 		canvas.remove();
 	};
+
 	(el as any).__any_scatter3d_cleanup = cleanup;
 }
 

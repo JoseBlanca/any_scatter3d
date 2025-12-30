@@ -7,7 +7,7 @@ app = marimo.App(width="medium")
 @app.cell
 def _():
     import random
-    from any_scatter3d import Scatter3dWidget
+    from any_scatter3d import Scatter3dWidget, Category
 
     import numpy as np
     import pandas
@@ -15,18 +15,11 @@ def _():
     num_points = 100
 
     points = np.random.randn(num_points, 3)
-    possible_species = ['species1', 'species2', 'species3']
-    possible_sizes = ['small', 'medium', 'big']
+    species_list = ['species1', 'species2', 'species3']
+    species = random.choices(species_list, k=num_points)
+    species = Category(pandas.Series(species, name='species'))
 
-    points = pandas.DataFrame({
-        'x': np.random.randn(num_points),
-        'y': np.random.randn(num_points),
-        'z': np.random.randn(num_points),
-        'cat_species': random.choices(possible_species, k=num_points),
-        'cat_sizes': random.choices(possible_sizes, k=num_points)
-    })
-
-    w = Scatter3dWidget(dframe=points, categories_cols=["cat_species", "cat_sizes"])
+    w = Scatter3dWidget(xyz=points, category=species)
     w.count = 100
     w
     return (w,)
@@ -34,7 +27,7 @@ def _():
 
 @app.cell
 def _(w):
-    print(w.get_classifications(["cat_sizes"]))
+    print(w.category)
     return
 
 

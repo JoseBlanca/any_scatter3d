@@ -1,5 +1,3 @@
-import type { WidgetModel } from "./model";
-
 const MIN_WIDGET_HEIGHT = "300px";
 const MIN_PLOT_HEIGHT = "240px";
 
@@ -37,7 +35,6 @@ export function pointerInfoFromEvent(
 
 export function createWidgetRoot(el: HTMLElement) {
 	el.innerHTML = "";
-
 	el.style.height = "100%";
 	el.style.minHeight = MIN_WIDGET_HEIGHT;
 
@@ -49,9 +46,9 @@ export function createWidgetRoot(el: HTMLElement) {
 	root.style.fontFamily = "system-ui, sans-serif";
 	root.style.height = "100%";
 	root.style.minHeight = MIN_WIDGET_HEIGHT;
-
-	root.style.height = "100%";
 	root.style.boxSizing = "border-box"; // padding counted inside height
+
+	root.tabIndex = 0;
 
 	const toolbar = document.createElement("div");
 	toolbar.style.display = "flex";
@@ -63,7 +60,6 @@ export function createWidgetRoot(el: HTMLElement) {
 	canvasHost.style.width = "100%";
 	canvasHost.style.border = "1px solid #ddd";
 	canvasHost.style.borderRadius = "8px";
-
 	canvasHost.style.flex = "1 1 auto";
 	canvasHost.style.minHeight = MIN_PLOT_HEIGHT;
 	canvasHost.style.minWidth = "0";
