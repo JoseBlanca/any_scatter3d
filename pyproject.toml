@@ -1,19 +1,15 @@
 [project]
-name = "any-scatter3d"
+name = "scatter3d-anywidget"
 version = "0.1.0"
 description = "3D scatter widget with lasso selection"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = ["anywidget[dev]>=0.9.21", "narwhals>=2.14.0", "numpy>=2.3.5"]
+license = { text = "MIT" }
+dependencies = ["anywidget>=0.9.21", "narwhals>=2.14.0", "numpy>=2.3.5"]
 
 [build-system]
 requires = ["uv_build"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = [
-    "marimo>=0.18.4",
-    "pandas>=2.3.3",
-    "polars>=1.36.1",
-    "pytest>=9.0.2",
-]
+dev = ["marimo>=0.18.4", "pandas>=2.3.3", "polars>=1.36.1", "pytest>=9.0.2"]

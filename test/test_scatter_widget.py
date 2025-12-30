@@ -3,7 +3,7 @@ import base64
 import numpy
 import pandas
 
-from any_scatter3d.scatter3d import Scatter3dWidget, Category
+from scatter3d.scatter3d import Scatter3dWidget, Category
 
 
 def test_xyz_bytes_t_packs_float32_row_major():
