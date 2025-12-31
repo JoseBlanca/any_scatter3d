@@ -102,7 +102,7 @@ The lasso tool allows:
 
 ## Project status
 
-The public API may still evolve.
+This is alpha software that we are using in our research.
 
 Contributions and feedback are welcome.
 
