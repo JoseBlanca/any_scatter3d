@@ -12,10 +12,10 @@ export const TRAITS = {
 	labels: "labels_t",
 	colors: "colors_t",
 	missingColor: "missing_color_t",
-
 	lassoRequest: "lasso_request_t",
 	lassoMask: "lasso_mask_t",
 	lassoResult: "lasso_result_t",
+	showAxes: "show_axes_t",
 } as const;
 
 export type TraitKey = typeof TRAITS[keyof typeof TRAITS];

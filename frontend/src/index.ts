@@ -75,6 +75,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 	// Initial data push
 	three.setPointsFromModel();
 	three.setColorsFromModel();
+	three.setAxesFromModel();
 
 	// --- 2D overlay canvas (lasso) ---
 	const { canvas, resizeCanvas } = createOverlayCanvas(canvasHost);
@@ -238,9 +239,14 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		}
 	};
 
+	const onShowAxesChange = () => {
+		three.setAxesFromModel();
+	};
+
 	model.on(`change:${TRAITS.xyzBytes}`, onXYZChange);
 	model.on(`change:${TRAITS.codedValues}`, onColorsRelatedChange);
 	model.on(`change:${TRAITS.colors}`, onColorsRelatedChange);
+	model.on(`change:${TRAITS.showAxes}`, onShowAxesChange);
 	model.on(`change:${TRAITS.missingColor}`, onColorsRelatedChange);
 	model.on(`change:${TRAITS.labels}`, onLabelsChange);
 	model.on(`change:${TRAITS.lassoResult}`, onLassoResultChange);
@@ -362,6 +368,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		model.off(`change:${TRAITS.missingColor}`, onColorsRelatedChange);
 		model.off(`change:${TRAITS.labels}`, onLabelsChange);
 		model.off(`change:${TRAITS.lassoResult}`, onLassoResultChange);
+		model.off(`change:${TRAITS.showAxes}`, onShowAxesChange);
 
 		stopObserving();
 		cancelAnimationFrame(rafId);

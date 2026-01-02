@@ -441,6 +441,11 @@ class Scatter3dWidget(anywidget.AnyWidget):
         help="Point size for rendering (three.js PointsMaterial.size).",
     ).tag(sync=True)
 
+    show_axes_t = traitlets.Bool(
+        default_value=True,
+        help=("Whether to draw axis lines (X, Y, Z) from the origin (0,0,0)."),
+    ).tag(sync=True)
+
     def __init__(self, xyz: numpy.ndarray, category: Category):
         super().__init__()
         self._category_cb_id: int | None = None

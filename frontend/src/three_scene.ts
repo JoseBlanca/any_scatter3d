@@ -21,11 +21,18 @@ export type ThreeScene = {
 	// byte = i >> 3, bit = 7 - (i & 7)
 	selectMaskInLasso: (polyNdc: { x: number; y: number }[]) => Uint8Array;
 
+	setAxesFromModel: () => void;
+
 	render: () => void;
 	dispose: () => void;
 };
 
 type Point2D = { x: number; y: number };
+
+const BLACK = "#000";
+const X_AXIS_COLOR = BLACK;
+const Y_AXIS_COLOR = BLACK;
+const Z_AXIS_COLOR = BLACK;
 
 function positionsFromXYZBytes(xyzBytes: unknown): Float32Array {
 	const f32 = bytesToFloat32ArrayLE(xyzBytes);
@@ -152,6 +159,79 @@ export function createThreeScene(
 	const pointsObj = new THREE.Points(geom, mat);
 	scene.add(pointsObj);
 
+	const axesGroup = new THREE.Group();
+	scene.add(axesGroup);
+
+	function makeAxisLine(color: number): THREE.Line {
+		const g = new THREE.BufferGeometry();
+		// 2 points: origin and endpoint
+		const pos = new Float32Array(6);
+		g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+		const m = new THREE.LineBasicMaterial({
+			color,
+			transparent: true,
+			opacity: 0.7,
+		});
+		return new THREE.Line(g, m);
+	}
+
+	const xAxis = makeAxisLine(X_AXIS_COLOR);
+	const yAxis = makeAxisLine(Y_AXIS_COLOR);
+	const zAxis = makeAxisLine(Z_AXIS_COLOR);
+	axesGroup.add(xAxis, yAxis, zAxis);
+
+	function computeMaxXYZ(posArr: Float32Array): { max: number } {
+		let max = -Infinity;
+
+		for (let i = 0; i < posArr.length; i++) {
+			const v = posArr[i];
+			if (v > max) max = v;
+		}
+
+		// Safe fallback for empty or invalid arrays
+		if (!Number.isFinite(max)) max = 0;
+
+		return { max };
+	}
+
+	function setLinePositions(
+		line: THREE.Line,
+		x0: number,
+		y0: number,
+		z0: number,
+		x1: number,
+		y1: number,
+		z1: number,
+	) {
+		const attr = line.geometry.getAttribute(
+			"position",
+		) as THREE.BufferAttribute;
+		const a = attr.array as Float32Array;
+		a[0] = x0;
+		a[1] = y0;
+		a[2] = z0;
+		a[3] = x1;
+		a[4] = y1;
+		a[5] = z1;
+		attr.needsUpdate = true;
+	}
+
+	function setAxesFromModel() {
+		const show = Boolean(model.get(TRAITS.showAxes));
+		axesGroup.visible = show;
+
+		if (!show) return;
+
+		const pos = geom.getAttribute("position") as THREE.BufferAttribute;
+		const arr = pos.array as Float32Array;
+		const { max } = computeMaxXYZ(arr);
+
+		// from origin to maxima on each axis
+		setLinePositions(xAxis, 0, 0, 0, max, 0, 0);
+		setLinePositions(yAxis, 0, 0, 0, 0, max, 0);
+		setLinePositions(zAxis, 0, 0, 0, 0, 0, max);
+	}
+
 	function setPointsFromModel() {
 		const arr = positionsFromXYZBytes(model.get(TRAITS.xyzBytes));
 
@@ -172,6 +252,7 @@ export function createThreeScene(
 
 		geom.computeBoundingSphere();
 		frameCameraToGeometry();
+		setAxesFromModel();
 	}
 
 	function setColorsFromModel() {
@@ -278,6 +359,7 @@ export function createThreeScene(
 		setSize,
 		setPointsFromModel,
 		setColorsFromModel,
+		setAxesFromModel,
 		selectMaskInLasso,
 		render,
 		dispose,
