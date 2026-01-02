@@ -3,7 +3,7 @@ import pandas
 import polars
 import pytest
 
-from any_scatter3d.scatter3d import Category, LabelListErrorResponse
+from scatter3d.scatter3d import Category, LabelListErrorResponse
 
 
 def get_test_series():
