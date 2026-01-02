@@ -1,5 +1,5 @@
 [project]
-name = "scatter3d-anywidget"
+name = "scatter3d"
 version = "0.1.0"
 description = "3D scatter widget with lasso selection"
 readme = "README.md"
