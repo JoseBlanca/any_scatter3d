@@ -162,7 +162,7 @@ export function createThreeScene(
 	const axesGroup = new THREE.Group();
 	scene.add(axesGroup);
 
-	function makeAxisLine(color: number): THREE.Line {
+	function makeAxisLine(color: string): THREE.Line {
 		const g = new THREE.BufferGeometry();
 		// 2 points: origin and endpoint
 		const pos = new Float32Array(6);
@@ -230,7 +230,48 @@ export function createThreeScene(
 		setLinePositions(xAxis, 0, 0, 0, max, 0, 0);
 		setLinePositions(yAxis, 0, 0, 0, 0, max, 0);
 		setLinePositions(zAxis, 0, 0, 0, 0, 0, max);
+
+		const pad = max * 0.03; // 3% past the tip
+		xLabel.position.set(max + pad, 0, 0);
+		yLabel.position.set(0, max + pad, 0);
+		zLabel.position.set(0, 0, max + pad);
 	}
+
+	function makeAxisLabelSprite(text: "x" | "y" | "z"): THREE.Sprite {
+		const canvas = document.createElement("canvas");
+		canvas.width = 128;
+		canvas.height = 128;
+
+		const ctx = canvas.getContext("2d")!;
+		ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+		ctx.font = "bold 50px sans-serif";
+		ctx.textAlign = "center";
+		ctx.textBaseline = "middle";
+		ctx.fillStyle = "rgba(255,255,255,0.95)";
+		ctx.strokeStyle = "rgba(0,0,0,0.65)";
+		ctx.lineWidth = 6;
+
+		ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
+		ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+		const tex = new THREE.CanvasTexture(canvas);
+		tex.colorSpace = THREE.SRGBColorSpace;
+
+		const mat = new THREE.SpriteMaterial({
+			map: tex,
+			transparent: true,
+			depthTest: false,
+		});
+
+		return new THREE.Sprite(mat);
+	}
+
+	const xLabel = makeAxisLabelSprite("x");
+	const yLabel = makeAxisLabelSprite("y");
+	const zLabel = makeAxisLabelSprite("z");
+
+	axesGroup.add(xLabel, yLabel, zLabel);
 
 	function setPointsFromModel() {
 		const arr = positionsFromXYZBytes(model.get(TRAITS.xyzBytes));
