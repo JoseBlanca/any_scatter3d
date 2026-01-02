@@ -14,3 +14,4 @@ node_modules/
 
 biome.json
 github_file_urls.txt
+src/scatter3d/static/
