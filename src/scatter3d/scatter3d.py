@@ -492,11 +492,18 @@ class Scatter3dWidget(anywidget.AnyWidget):
         if not xyz_f32.flags["C_CONTIGUOUS"]:
             xyz_f32 = numpy.ascontiguousarray(xyz_f32)
 
+        # Remap (x,y,z) -> (x,z,y) so that "z" in user data becomes "up" (Y) in Three.js
+        # avoid mutating caller's array if it was already float32 C
+        # xyz_f32 = xyz_f32.copy()
+        xyz_f32[:, [1, 2]] = xyz_f32[:, [2, 1]]
+
         return xyz_f32, xyz_f32.tobytes(order="C")
 
     def _get_xyz(self) -> numpy.ndarray:
         if self._xyz is None:
             raise RuntimeError("xyz has not been set")
+        out = self._xyz.copy()
+        out[:, [1, 2]] = out[:, [2, 1]]
         return self._xyz.copy()
 
     def _set_xyz(self, xyz: numpy.ndarray) -> None:

@@ -228,13 +228,13 @@ export function createThreeScene(
 
 		// from origin to maxima on each axis
 		setLinePositions(xAxis, 0, 0, 0, max, 0, 0);
-		setLinePositions(yAxis, 0, 0, 0, 0, max, 0);
-		setLinePositions(zAxis, 0, 0, 0, 0, 0, max);
+		setLinePositions(zAxis, 0, 0, 0, 0, max, 0);
+		setLinePositions(yAxis, 0, 0, 0, 0, 0, max);
 
 		const pad = max * 0.03; // 3% past the tip
 		xLabel.position.set(max + pad, 0, 0);
-		yLabel.position.set(0, max + pad, 0);
-		zLabel.position.set(0, 0, max + pad);
+		yLabel.position.set(0, 0, max + pad);
+		zLabel.position.set(0, max + pad, 0);
 	}
 
 	function makeAxisLabelSprite(text: "x" | "y" | "z"): THREE.Sprite {

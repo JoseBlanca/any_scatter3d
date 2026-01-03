@@ -20,12 +20,13 @@ def _():
     species = random.choices(species_list, k=num_points)
     species = Category(pandas.Series(species, name="species"))
 
+    points = np.array([[1, 0 ,0], [2, 0, 0]])
+    points = np.array([[0, 1 ,0], [0, 2, 0]])
+    points = np.array([[0, 0 ,1], [0, 0, 2]])
+    species = Category(pandas.Series([1, 2], name='species'))
+
     w = Scatter3dWidget(xyz=points, category=species)
     w.point_size = 0.15
-    species.set_label_list(
-        ["species1"], on_missing_labels=LabelListErrorResponse.SET_MISSING
-    )
-    species.set_label_list(["species1", "species4"])
     ui = marimo.ui.anywidget(w)
     ui
     return species, ui
