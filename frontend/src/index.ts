@@ -72,11 +72,6 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 	three.domElement.style.inset = "0";
 	three.domElement.style.zIndex = "1"; // below overlay
 
-	// Initial data push
-	three.setPointsFromModel();
-	three.setColorsFromModel();
-	three.setAxesFromModel();
-
 	// --- 2D overlay canvas (lasso) ---
 	const { canvas, resizeCanvas } = createOverlayCanvas(canvasHost);
 	const ctx = get2dContext(canvas);
@@ -241,6 +236,9 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 
 	const onShowAxesChange = () => {
 		three.setAxesFromModel();
+		if (model.get(TRAITS.showAxes)) {
+			three.rebuildAxisLabels?.();
+		}
 	};
 
 	const onAxisLabelSizeChange = () => {
@@ -256,6 +254,13 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 	model.on(`change:${TRAITS.labels}`, onLabelsChange);
 	model.on(`change:${TRAITS.lassoResult}`, onLassoResultChange);
 	model.on(`change:${TRAITS.axisLabelSize}`, onAxisLabelSizeChange);
+
+	// Initial data push
+	three.setPointsFromModel();
+	three.setColorsFromModel();
+	three.setAxesFromModel();
+
+	onAxisLabelSizeChange();
 
 	// Make root focusable so Enter/Escape works
 	root.tabIndex = 0;
@@ -375,7 +380,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		model.off(`change:${TRAITS.labels}`, onLabelsChange);
 		model.off(`change:${TRAITS.lassoResult}`, onLassoResultChange);
 		model.off(`change:${TRAITS.showAxes}`, onShowAxesChange);
-		model.on(`change:${TRAITS.axisLabelSize}`, onAxisLabelSizeChange);
+		model.off(`change:${TRAITS.axisLabelSize}`, onAxisLabelSizeChange);
 
 		stopObserving();
 		cancelAnimationFrame(rafId);

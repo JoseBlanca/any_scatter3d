@@ -260,7 +260,6 @@ export function createThreeScene(
 		zLabel = makeAxisLabelSprite("z", size);
 		axesGroup.add(xLabel, yLabel, zLabel);
 
-		// keep their positions correct
 		setAxesFromModel();
 	}
 
@@ -268,35 +267,47 @@ export function createThreeScene(
 		text: "x" | "y" | "z",
 		size: number,
 	): THREE.Sprite {
+		// --- draw high-resolution text on a canvas ---
 		const canvas = document.createElement("canvas");
-		canvas.width = 128;
-		canvas.height = 128;
+		const RES = 256;
+		canvas.width = RES;
+		canvas.height = RES;
 
-		const ctx = canvas.getContext("2d")!;
-		ctx.clearRect(0, 0, canvas.width, canvas.height);
+		const ctx = canvas.getContext("2d");
+		if (!ctx) {
+			throw new Error("Failed to get 2D canvas context for axis label");
+		}
+		ctx.clearRect(0, 0, RES, RES);
 
-		const axisLabelPx = Math.max(16, size * 1000);
-
-		ctx.font = `bold ${axisLabelPx}px sans-serif`;
+		// fixed font size → visual quality only
+		const fontPx = 160;
+		ctx.font = `bold ${fontPx}px sans-serif`;
 		ctx.textAlign = "center";
 		ctx.textBaseline = "middle";
+
 		ctx.fillStyle = "rgba(255,255,255,0.95)";
 		ctx.strokeStyle = "rgba(0,0,0,0.65)";
-		ctx.lineWidth = 6;
+		ctx.lineWidth = 10;
 
-		ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
-		ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+		ctx.strokeText(text, RES / 2, RES / 2);
+		ctx.fillText(text, RES / 2, RES / 2);
 
 		const tex = new THREE.CanvasTexture(canvas);
 		tex.colorSpace = THREE.SRGBColorSpace;
+		tex.needsUpdate = true;
 
 		const mat = new THREE.SpriteMaterial({
 			map: tex,
 			transparent: true,
 			depthTest: false,
+			depthWrite: false,
 		});
 
-		return new THREE.Sprite(mat);
+		const sprite = new THREE.Sprite(mat);
+
+		sprite.scale.set(size, size, 1);
+
+		return sprite;
 	}
 
 	const initialSize = getAxisLabelSize();
