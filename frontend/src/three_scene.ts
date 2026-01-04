@@ -22,6 +22,7 @@ export type ThreeScene = {
 	selectMaskInLasso: (polyNdc: { x: number; y: number }[]) => Uint8Array;
 
 	setAxesFromModel: () => void;
+	rebuildAxisLabels: () => void;
 
 	render: () => void;
 	dispose: () => void;
@@ -237,7 +238,36 @@ export function createThreeScene(
 		zLabel.position.set(0, max + pad, 0);
 	}
 
-	function makeAxisLabelSprite(text: "x" | "y" | "z"): THREE.Sprite {
+	function getAxisLabelSize(): number {
+		const v = Number((model.get(TRAITS.axisLabelSize) as any) ?? 0.05);
+		return Number.isFinite(v) && v > 0 ? v : 0.05;
+	}
+
+	function rebuildAxisLabels() {
+		// remove old sprites
+		axesGroup.remove(xLabel, yLabel, zLabel);
+
+		// IMPORTANT: dispose old GPU resources to avoid leaks
+		for (const s of [xLabel, yLabel, zLabel]) {
+			const m = s.material as THREE.SpriteMaterial;
+			m.map?.dispose();
+			m.dispose();
+		}
+
+		const size = getAxisLabelSize();
+		xLabel = makeAxisLabelSprite("x", size);
+		yLabel = makeAxisLabelSprite("y", size);
+		zLabel = makeAxisLabelSprite("z", size);
+		axesGroup.add(xLabel, yLabel, zLabel);
+
+		// keep their positions correct
+		setAxesFromModel();
+	}
+
+	function makeAxisLabelSprite(
+		text: "x" | "y" | "z",
+		size: number,
+	): THREE.Sprite {
 		const canvas = document.createElement("canvas");
 		canvas.width = 128;
 		canvas.height = 128;
@@ -245,7 +275,9 @@ export function createThreeScene(
 		const ctx = canvas.getContext("2d")!;
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-		ctx.font = "bold 50px sans-serif";
+		const axisLabelPx = Math.max(16, size * 1000);
+
+		ctx.font = `bold ${axisLabelPx}px sans-serif`;
 		ctx.textAlign = "center";
 		ctx.textBaseline = "middle";
 		ctx.fillStyle = "rgba(255,255,255,0.95)";
@@ -267,9 +299,10 @@ export function createThreeScene(
 		return new THREE.Sprite(mat);
 	}
 
-	const xLabel = makeAxisLabelSprite("x");
-	const yLabel = makeAxisLabelSprite("y");
-	const zLabel = makeAxisLabelSprite("z");
+	const initialSize = getAxisLabelSize();
+	let xLabel = makeAxisLabelSprite("x", initialSize);
+	let yLabel = makeAxisLabelSprite("y", initialSize);
+	let zLabel = makeAxisLabelSprite("z", initialSize);
 
 	axesGroup.add(xLabel, yLabel, zLabel);
 
@@ -401,6 +434,7 @@ export function createThreeScene(
 		setPointsFromModel,
 		setColorsFromModel,
 		setAxesFromModel,
+		rebuildAxisLabels,
 		selectMaskInLasso,
 		render,
 		dispose,

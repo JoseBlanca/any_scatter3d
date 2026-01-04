@@ -16,6 +16,8 @@ export const TRAITS = {
 	lassoMask: "lasso_mask_t",
 	lassoResult: "lasso_result_t",
 	showAxes: "show_axes_t",
+	pointsSize: "points_size_t",
+	axisLabelSize: "axis_label_size_t",
 } as const;
 
 export type TraitKey = typeof TRAITS[keyof typeof TRAITS];

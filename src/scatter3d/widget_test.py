@@ -27,6 +27,7 @@ def _():
 
     w = Scatter3dWidget(xyz=points, category=species)
     w.point_size = 0.15
+    w.axis_label_size = 0.005
     ui = marimo.ui.anywidget(w)
     ui
     return species, ui

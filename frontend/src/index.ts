@@ -243,6 +243,11 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		three.setAxesFromModel();
 	};
 
+	const onAxisLabelSizeChange = () => {
+		if (!model.get(TRAITS.showAxes)) return;
+		three.rebuildAxisLabels?.();
+	};
+
 	model.on(`change:${TRAITS.xyzBytes}`, onXYZChange);
 	model.on(`change:${TRAITS.codedValues}`, onColorsRelatedChange);
 	model.on(`change:${TRAITS.colors}`, onColorsRelatedChange);
@@ -250,6 +255,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 	model.on(`change:${TRAITS.missingColor}`, onColorsRelatedChange);
 	model.on(`change:${TRAITS.labels}`, onLabelsChange);
 	model.on(`change:${TRAITS.lassoResult}`, onLassoResultChange);
+	model.on(`change:${TRAITS.axisLabelSize}`, onAxisLabelSizeChange);
 
 	// Make root focusable so Enter/Escape works
 	root.tabIndex = 0;
@@ -369,6 +375,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		model.off(`change:${TRAITS.labels}`, onLabelsChange);
 		model.off(`change:${TRAITS.lassoResult}`, onLassoResultChange);
 		model.off(`change:${TRAITS.showAxes}`, onShowAxesChange);
+		model.on(`change:${TRAITS.axisLabelSize}`, onAxisLabelSizeChange);
 
 		stopObserving();
 		cancelAnimationFrame(rafId);
