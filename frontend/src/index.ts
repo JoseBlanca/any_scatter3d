@@ -21,6 +21,8 @@ import {
 import { createControlBar, renderControlBar, DEFAULT_UI_CONFIG } from "./ui";
 import { createThreeScene } from "./three_scene";
 import { uint8ArrayToBase64 } from "./binary";
+import { bindModelToView } from "./model_bindings";
+import { createTooltipController } from "./tooltip_controller";
 
 const RESIZE_THRESHOLD_PX = 2;
 
@@ -103,6 +105,10 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		tooltip.style.top = `${cssY + 10}px`;
 		tooltip.style.display = "block";
 	}
+	const tooltipView = {
+		hide: hideTooltip,
+		showAt: showTooltipAt,
+	};
 
 	// --- UI ---
 	const uiCfg = DEFAULT_UI_CONFIG;
@@ -214,134 +220,28 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		model.save_changes();
 	}
 
-	// -----------------------
-	// Model -> view updates
-	// -----------------------
+	const tooltipController = createTooltipController({
+		model,
+		three,
+		threeCanvas: three.domElement,
+		view: tooltipView,
+		isLassoMode: () => state.mode.kind === "lasso",
+		signal: abortController.signal,
+	});
 
-	const onXYZChange = () => {
-		three.setPointsFromModel();
-		// points changed implies we should recolor too
-		three.setColorsFromModel();
-	};
+	const modelBindings = bindModelToView({
+		model,
+		three,
+		refreshLabelsUI,
+		onTooltipResponseChange: tooltipController.onTooltipResponseChange,
+	});
 
-	const onColorsRelatedChange = () => {
-		// coded_values_t or palette changed
-		three.setColorsFromModel();
-	};
-
-	const onLabelsChange = () => {
-		refreshLabelsUI();
-		// labels affect mapping code->color index; recolor defensively
-		three.setColorsFromModel();
-	};
-
-	const onLassoResultChange = () => {
-		const res = model.get(TRAITS.lassoResult) as LassoResult | unknown;
-		if (!res || typeof res !== "object") return;
-		const status = (res as any).status;
-		if (status === "error") {
-			// Hard visible signal: console + could add a toast later
-			// Important: don't swallow this silently.
-			console.error("Lasso error:", (res as any).message ?? res);
-		}
-	};
-
-	const onShowAxesChange = () => {
-		three.setAxesFromModel();
-		if (model.get(TRAITS.showAxes)) {
-			three.rebuildAxisLabels?.();
-		}
-	};
-
-	const onAxisLabelSizeChange = () => {
-		if (!model.get(TRAITS.showAxes)) return;
-		three.rebuildAxisLabels?.();
-	};
-
-	let tooltipReqCounter = 0;
-	let pendingTooltipReq: number | null = null;
-	let pendingTooltipPos: { x: number; y: number } | null = null;
-
-	three.domElement.addEventListener(
-		"click",
-		(e) => {
-			// ignore clicks during lasso mode
-			if (state.mode.kind === "lasso") return;
-
-			const rect = three.domElement.getBoundingClientRect();
-			const cssX = e.clientX - rect.left;
-			const cssY = e.clientY - rect.top;
-
-			const x01 = rect.width > 0 ? cssX / rect.width : 0;
-			const y01 = rect.height > 0 ? cssY / rect.height : 0;
-
-			const ndcX = x01 * 2 - 1;
-			const ndcY = -(y01 * 2 - 1);
-
-			const idx = three.pickPointIndex(ndcX, ndcY);
-			if (idx == null) {
-				hideTooltip();
-				return;
-			}
-
-			const req = ++tooltipReqCounter;
-			pendingTooltipReq = req;
-			pendingTooltipPos = { x: cssX, y: cssY };
-
-			showTooltipAt(cssX, cssY, "Loading…");
-
-			model.set(TRAITS.tooltipRequest, {
-				kind: "tooltip",
-				i: idx,
-				request_id: req,
-			});
-			model.save_changes();
-		},
-		{ signal: abortController.signal },
-	);
-	const onTooltipResponseChange = () => {
-		const res = model.get(TRAITS.tooltipResponse) as any;
-		if (!res || typeof res !== "object") return;
-
-		// ignore out-of-order responses
-		const requestId = (res as any).request_id;
-		if (pendingTooltipReq != null && requestId !== pendingTooltipReq) return;
-
-		if (!pendingTooltipPos) return;
-
-		if (res.status === "error") {
-			showTooltipAt(
-				pendingTooltipPos.x,
-				pendingTooltipPos.y,
-				`Error: ${String(res.message ?? "unknown")}`,
-			);
-			return;
-		}
-
-		const data = (res as any).data ?? {};
-		const rows: string[] = [];
-		for (const [k, v] of Object.entries(data)) {
-			rows.push(`<div><b>${k}</b>: ${String(v)}</div>`);
-		}
-		showTooltipAt(pendingTooltipPos.x, pendingTooltipPos.y, rows.join(""));
-	};
-
-	model.on(`change:${TRAITS.tooltipResponse}`, onTooltipResponseChange);
-	model.on(`change:${TRAITS.xyzBytes}`, onXYZChange);
-	model.on(`change:${TRAITS.codedValues}`, onColorsRelatedChange);
-	model.on(`change:${TRAITS.colors}`, onColorsRelatedChange);
-	model.on(`change:${TRAITS.showAxes}`, onShowAxesChange);
-	model.on(`change:${TRAITS.missingColor}`, onColorsRelatedChange);
-	model.on(`change:${TRAITS.labels}`, onLabelsChange);
-	model.on(`change:${TRAITS.lassoResult}`, onLassoResultChange);
-	model.on(`change:${TRAITS.axisLabelSize}`, onAxisLabelSizeChange);
+	tooltipController.dispose();
 
 	// Initial data push
 	three.setPointsFromModel();
 	three.setColorsFromModel();
 	three.setAxesFromModel();
-
-	onAxisLabelSizeChange();
 
 	// Make root focusable so Enter/Escape works
 	root.tabIndex = 0;
@@ -453,17 +353,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 
 	const cleanup = () => {
 		abortController.abort();
-
-		model.off(`change:${TRAITS.xyzBytes}`, onXYZChange);
-		model.off(`change:${TRAITS.codedValues}`, onColorsRelatedChange);
-		model.off(`change:${TRAITS.colors}`, onColorsRelatedChange);
-		model.off(`change:${TRAITS.missingColor}`, onColorsRelatedChange);
-		model.off(`change:${TRAITS.labels}`, onLabelsChange);
-		model.off(`change:${TRAITS.lassoResult}`, onLassoResultChange);
-		model.off(`change:${TRAITS.showAxes}`, onShowAxesChange);
-		model.off(`change:${TRAITS.axisLabelSize}`, onAxisLabelSizeChange);
-		model.off(`change:${TRAITS.tooltipResponse}`, onTooltipResponseChange);
-
+		modelBindings.dispose();
 		stopObserving();
 		cancelAnimationFrame(rafId);
 		three.dispose();
