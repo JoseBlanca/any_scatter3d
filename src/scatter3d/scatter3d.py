@@ -527,12 +527,10 @@ class Scatter3dWidget(anywidget.AnyWidget):
         req = change["new"] or {}
         if not isinstance(req, dict):
             return
-
-        # expected payload: {"kind": "tooltip", "i": <int>, "req": <int>}
         if req.get("kind") != "tooltip":
             return
 
-        request_id = req.get("req", None)
+        request_id = req.get("request_id", None)
         i = req.get("i", None)
 
         try:
@@ -547,13 +545,13 @@ class Scatter3dWidget(anywidget.AnyWidget):
             }
 
             self.tooltip_response_t = {
-                "req": request_id,
+                "request_id": request_id,
                 "status": "ok",
                 "data": data,
             }
         except Exception as e:
             self.tooltip_response_t = {
-                "req": request_id,
+                "request_id": request_id,
                 "status": "error",
                 "message": str(e),
             }

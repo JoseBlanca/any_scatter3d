@@ -21,7 +21,7 @@ export const TRAITS = {
 	tooltipResponse: "tooltip_response_t",
 
 	showAxes: "show_axes_t",
-	pointsSize: "points_size_t",
+	pointsSize: "point_size_t",
 	axisLabelSize: "axis_label_size_t",
 } as const;
 
@@ -51,8 +51,8 @@ export type LassoResult =
 			message: string;
 	  };
 
-export type TooltipRequest = { kind: "tooltip"; i: number; req: number };
+export type TooltipRequest = { kind: "tooltip"; i: number; request_id: number };
 
 export type TooltipResponse =
-	| { req?: number; status: "ok"; data: Record<string, unknown> }
-	| { req?: number; status: "error"; message: string };
+	| { request_id?: number; status: "ok"; data: Record<string, unknown> }
+	| { request_id?: number; status: "error"; message: string };

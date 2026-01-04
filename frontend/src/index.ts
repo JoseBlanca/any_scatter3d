@@ -290,7 +290,11 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 
 			showTooltipAt(cssX, cssY, "Loading…");
 
-			model.set(TRAITS.tooltipRequest, { kind: "tooltip", i: idx, req });
+			model.set(TRAITS.tooltipRequest, {
+				kind: "tooltip",
+				i: idx,
+				request_id: req,
+			});
 			model.save_changes();
 		},
 		{ signal: abortController.signal },
@@ -300,8 +304,8 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		if (!res || typeof res !== "object") return;
 
 		// ignore out-of-order responses
-		const req = (res as any).req;
-		if (pendingTooltipReq != null && req !== pendingTooltipReq) return;
+		const requestId = (res as any).request_id;
+		if (pendingTooltipReq != null && requestId !== pendingTooltipReq) return;
 
 		if (!pendingTooltipPos) return;
 
