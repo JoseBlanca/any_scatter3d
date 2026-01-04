@@ -3,7 +3,7 @@ from pathlib import Path
 from itertools import cycle, count
 from enum import Enum
 from collections import OrderedDict
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 import weakref
 import base64
 
@@ -451,11 +451,25 @@ class Scatter3dWidget(anywidget.AnyWidget):
         help=("Whether to draw axis lines (X, Y, Z) from the origin (0,0,0)."),
     ).tag(sync=True)
 
-    def __init__(self, xyz: numpy.ndarray, category: Category):
+    def __init__(
+        self,
+        xyz: numpy.ndarray,
+        category: Category,
+        point_ids: Sequence[str]
+        | Sequence[int]
+        | narwhals.typing.IntoSeriesT
+        | None = None,
+    ):
         super().__init__()
         self._category_cb_id: int | None = None
 
         if category is not None and xyz.shape[0] != category.num_values:
+            raise ValueError(
+                f"The number of points ({xyz.shape[0]}) should match "
+                f"the number of values in the category: {category.num_values}"
+            )
+
+        if point_ids is not None and xyz.shape[0] != len(point_ids):
             raise ValueError(
                 f"The number of points ({xyz.shape[0]}) should match "
                 f"the number of values in the category: {category.num_values}"
@@ -468,6 +482,29 @@ class Scatter3dWidget(anywidget.AnyWidget):
         self._category = None
         self.xyz = xyz
         self.category = category
+
+        self.point_ids = self._normalize_point_ids(point_ids)
+
+    def _normalize_point_ids(self, point_ids):
+        num_points = self.num_points
+
+        if point_ids is None:
+            point_ids = tuple(range(1, num_points + 1))
+
+        elif isinstance(point_ids, narwhals.Series):
+            point_ids = tuple(point_ids.to_list())
+
+        elif isinstance(point_ids, Sequence) and not isinstance(
+            point_ids, (str, bytes)
+        ):
+            point_ids = tuple(point_ids)
+        else:
+            raise TypeError("point_ids must be a Series, a sequence of values, or None")
+
+        if len(point_ids) != num_points:
+            raise ValueError("point_ids length must match number of points")
+
+        return point_ids
 
     def _on_category_changed(self, category: Category, event: str) -> None:
         """

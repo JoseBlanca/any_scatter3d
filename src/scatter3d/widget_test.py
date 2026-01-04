@@ -15,29 +15,27 @@ def _():
 
     num_points = 10000
 
+    point_ids = [f"id_{i}" for i in range(1, num_points + 1)]
     points = np.random.randn(num_points, 3)
     species_list = ["species1", "species2", "species3"]
     species = random.choices(species_list, k=num_points)
     species = Category(pandas.Series(species, name="species"))
 
-    points = np.array([[1, 0 ,0], [2, 0, 0]])
-    points = np.array([[0, 1 ,0], [0, 2, 0]])
-    points = np.array([[0, 0 ,1], [0, 0, 2]])
-    species = Category(pandas.Series([1, 2], name='species'))
-
-    w = Scatter3dWidget(xyz=points, category=species)
+    w = Scatter3dWidget(xyz=points, category=species, point_ids=point_ids)
     w.point_size = 0.15
-    w.axis_label_size = 0.005
+    w.axis_label_size = 1
     ui = marimo.ui.anywidget(w)
     ui
-    return species, ui
+    return species, ui, w
 
 
 @app.cell
-def _(species, ui):
+def _(species, ui, w):
     ui.lasso_result_t
     print(species.values.value_counts())
     print(species.num_unassigned)
+    print(species.values)
+    print(w.point_ids)
     return
 
 
