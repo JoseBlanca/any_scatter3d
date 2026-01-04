@@ -1,11 +1,18 @@
+// tooltip_controller.ts
 import type { WidgetModel } from "./model";
 import { TRAITS } from "./model";
 import type { createThreeScene } from "./three_scene";
 
 export type TooltipView = {
 	hide: () => void;
-	showAt: (cssX: number, cssY: number, html: string) => void;
+	showAt: (cssX: number, cssY: number, rows: Array<[string, string]>) => void;
+	showLoadingAt: (cssX: number, cssY: number) => void;
+	showErrorAt: (cssX: number, cssY: number, message: string) => void;
 };
+
+type TooltipResponse =
+	| { status: "ok"; request_id: number; data: Record<string, unknown> }
+	| { status: "error"; request_id: number; message?: unknown };
 
 export type TooltipControllerDeps = {
 	model: WidgetModel;
@@ -19,6 +26,17 @@ export type TooltipControllerDeps = {
 	// attach DOM listener with AbortController
 	signal: AbortSignal;
 };
+
+function isTooltipResponse(x: unknown): x is TooltipResponse {
+	if (!x || typeof x !== "object") return false;
+	const r = x as any;
+	if (typeof r.request_id !== "number") return false;
+	if (r.status !== "ok" && r.status !== "error") return false;
+	if (r.status === "ok" && (!r.data || typeof r.data !== "object"))
+		return false;
+	// message is optional for error
+	return true;
+}
 
 export function createTooltipController(deps: TooltipControllerDeps): {
 	onTooltipResponseChange: () => void;
@@ -53,7 +71,7 @@ export function createTooltipController(deps: TooltipControllerDeps): {
 		pendingTooltipReq = req;
 		pendingTooltipPos = { x: cssX, y: cssY };
 
-		view.showAt(cssX, cssY, "Loading…");
+		view.showLoadingAt(cssX, cssY);
 
 		model.set(TRAITS.tooltipRequest, {
 			kind: "tooltip",
@@ -66,29 +84,33 @@ export function createTooltipController(deps: TooltipControllerDeps): {
 	threeCanvas.addEventListener("click", onClick, { signal });
 
 	const onTooltipResponseChange = () => {
-		const res = model.get(TRAITS.tooltipResponse) as any;
-		if (!res || typeof res !== "object") return;
+		const raw = model.get(TRAITS.tooltipResponse) as unknown;
+		if (!isTooltipResponse(raw)) return;
 
-		const requestId = (res as any).request_id;
-		if (pendingTooltipReq != null && requestId !== pendingTooltipReq) return;
-
+		// Ignore out-of-order responses
+		if (pendingTooltipReq != null && raw.request_id !== pendingTooltipReq)
+			return;
 		if (!pendingTooltipPos) return;
 
-		if (res.status === "error") {
-			view.showAt(
+		// Consume the pending request. Also clear the counter so next click is clean.
+		pendingTooltipReq = null;
+
+		if (raw.status === "error") {
+			view.showErrorAt(
 				pendingTooltipPos.x,
 				pendingTooltipPos.y,
-				`Error: ${String(res.message ?? "unknown")}`,
+				String(raw.message ?? "unknown"),
 			);
 			return;
 		}
 
-		const data = (res as any).data ?? {};
-		const rows: string[] = [];
-		for (const [k, v] of Object.entries(data)) {
-			rows.push(`<div><b>${k}</b>: ${String(v)}</div>`);
+		// ok
+		const rows: Array<[string, string]> = [];
+		for (const [k, v] of Object.entries(raw.data)) {
+			rows.push([String(k), String(v)]);
 		}
-		view.showAt(pendingTooltipPos.x, pendingTooltipPos.y, rows.join(""));
+
+		view.showAt(pendingTooltipPos.x, pendingTooltipPos.y, rows);
 	};
 
 	return {

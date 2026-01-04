@@ -1,62 +1,14 @@
-import type { WidgetModel, LassoRequest, LassoResult } from "./model";
-import { TRAITS } from "./model";
-import {
-	createWidgetRoot,
-	observeSize,
-	createOverlayCanvas,
-	pointerInfoFromEvent,
-	get2dContext,
-} from "./view";
-import {
-	createInteractionState,
-	setMode,
-	onPointerDown,
-	onPointerMove,
-	onPointerUp,
-	cancelLasso,
-	commitLasso,
-	drawOverlay,
-	type InteractionState,
-} from "./interaction";
+import type { WidgetModel } from "./model";
+import { createWidgetRoot, createOverlayCanvas, get2dContext } from "./view";
+import { createInteractionState, drawOverlay } from "./interaction";
 import { createControlBar, renderControlBar, DEFAULT_UI_CONFIG } from "./ui";
 import { createThreeScene } from "./three_scene";
-import { uint8ArrayToBase64 } from "./binary";
 import { bindModelToView } from "./model_bindings";
 import { createTooltipController } from "./tooltip_controller";
-
-const RESIZE_THRESHOLD_PX = 2;
-
-function populateLabelSelect(
-	select: HTMLSelectElement,
-	labels: string[],
-	preferred?: string,
-) {
-	select.innerHTML = "";
-
-	for (const label of labels) {
-		const opt = document.createElement("option");
-		opt.value = label;
-		opt.textContent = label;
-		select.appendChild(opt);
-	}
-
-	if (select.options.length === 0) return;
-
-	if (
-		preferred &&
-		Array.from(select.options).some((o) => o.value === preferred)
-	) {
-		select.value = preferred;
-	} else {
-		select.selectedIndex = 0;
-	}
-}
-
-function getLabelsFromModel(model: WidgetModel): string[] {
-	const x = model.get(TRAITS.labels);
-	if (!Array.isArray(x)) return [];
-	return x.map((v) => String(v));
-}
+import { createInteractionController } from "./interaction_controller";
+import { createResizeController } from "./resize_controller";
+import { createRafController } from "./raf_controller";
+import { createLabelsController } from "./labels_controller";
 
 export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 	const cleanupPrev = (el as any).__any_scatter3d_cleanup as
@@ -80,39 +32,66 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 
 	const state = createInteractionState();
 
-	// Initial sizing
-	{
-		const r = canvasHost.getBoundingClientRect();
-		const cssW = Math.round(r.width);
-		const cssH = Math.round(r.height);
-		if (cssW > 0 && cssH > 0) {
-			const { devicePixelRatio, width, height } = resizeCanvas(cssW, cssH);
-			state.dpr = devicePixelRatio;
-			state.pixelWidth = width;
-			state.pixelHeight = height;
-			three.setSize(cssW, cssH, devicePixelRatio);
-		}
-	}
-
 	// tooltip
 	function hideTooltip() {
 		tooltip.style.display = "none";
 	}
 
-	function showTooltipAt(cssX: number, cssY: number, html: string) {
-		tooltip.innerHTML = html;
+	function positionTooltip(cssX: number, cssY: number) {
 		tooltip.style.left = `${cssX + 10}px`;
 		tooltip.style.top = `${cssY + 10}px`;
 		tooltip.style.display = "block";
 	}
+
+	function clearTooltip() {
+		tooltip.replaceChildren();
+	}
+
+	function showLoadingAt(cssX: number, cssY: number) {
+		clearTooltip();
+		tooltip.textContent = "Loading…";
+		positionTooltip(cssX, cssY);
+	}
+
+	function showErrorAt(cssX: number, cssY: number, message: string) {
+		clearTooltip();
+		tooltip.textContent = `Error: ${message}`;
+		positionTooltip(cssX, cssY);
+	}
+
+	function showAt(cssX: number, cssY: number, rows: Array<[string, string]>) {
+		clearTooltip();
+
+		for (const [k, v] of rows) {
+			const row = document.createElement("div");
+
+			const b = document.createElement("b");
+			b.textContent = k;
+
+			row.appendChild(b);
+			row.append(`: ${v}`);
+
+			tooltip.appendChild(row);
+		}
+
+		positionTooltip(cssX, cssY);
+	}
+
 	const tooltipView = {
 		hide: hideTooltip,
-		showAt: showTooltipAt,
+		showAt,
+		showLoadingAt,
+		showErrorAt,
 	};
 
 	// --- UI ---
 	const uiCfg = DEFAULT_UI_CONFIG;
 	const bar = createControlBar(toolbar, uiCfg);
+
+	const labelsController = createLabelsController({
+		model,
+		select: bar.labelSelect,
+	});
 
 	function syncUiFromState() {
 		const uiState = {
@@ -134,91 +113,16 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		}
 	}
 
-	// initial mode
-	setMode(state, { kind: "rotate" });
-	syncUiFromState();
-
-	bar.rotateBtn.addEventListener(
-		"click",
-		() => {
-			setMode(state, { kind: "rotate" });
-			syncUiFromState();
-		},
-		{ signal: abortController.signal },
-	);
-
-	bar.lassoBtn.addEventListener(
-		"click",
-		() => {
-			setMode(state, { kind: "lasso", operation: "add" });
-			syncUiFromState();
-		},
-		{ signal: abortController.signal },
-	);
-
-	bar.addBtn.addEventListener(
-		"click",
-		() => {
-			if (state.mode.kind !== "lasso") return;
-			setMode(state, { kind: "lasso", operation: "add" });
-			syncUiFromState();
-		},
-		{ signal: abortController.signal },
-	);
-
-	bar.removeBtn.addEventListener(
-		"click",
-		() => {
-			if (state.mode.kind !== "lasso") return;
-			setMode(state, { kind: "lasso", operation: "remove" });
-			syncUiFromState();
-		},
-		{ signal: abortController.signal },
-	);
-
-	function refreshLabelsUI() {
-		const labels = getLabelsFromModel(model);
-		const prev = bar.labelSelect.value;
-		populateLabelSelect(bar.labelSelect, labels, prev);
-	}
-
-	// initial labels
-	refreshLabelsUI();
-
-	// -----------------------
-	// Lasso commit -> Python
-	// -----------------------
-	let requestCounter = 1;
-
-	function sendCommittedLasso(args: {
-		model: WidgetModel;
-		three: ReturnType<typeof createThreeScene>;
-		bar: typeof bar;
-		state: InteractionState;
-		polygonNdc: { x: number; y: number }[];
-	}) {
-		const { model, three, bar, state, polygonNdc } = args;
-
-		if (state.mode.kind !== "lasso") return;
-
-		const label = bar.labelSelect.value;
-		if (!label) return;
-
-		const op = state.mode.operation;
-		const requestId = requestCounter++;
-		const mask = three.selectMaskInLasso(polygonNdc);
-		if (mask.length === 0) return;
-
-		model.set(TRAITS.lassoMask, uint8ArrayToBase64(mask));
-		const req: LassoRequest = {
-			kind: "lasso_commit",
-			op,
-			label,
-			request_id: requestId,
-		};
-		model.set(TRAITS.lassoRequest, req);
-		model.save_changes();
-	}
+	const interactionController = createInteractionController({
+		model,
+		three,
+		bar,
+		state,
+		root,
+		canvas,
+		syncUiFromState,
+		signal: abortController.signal,
+	});
 
 	const tooltipController = createTooltipController({
 		model,
@@ -232,130 +136,42 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 	const modelBindings = bindModelToView({
 		model,
 		three,
-		refreshLabelsUI,
+		refreshLabelsUI: labelsController.refresh,
 		onTooltipResponseChange: tooltipController.onTooltipResponseChange,
 	});
-
-	tooltipController.dispose();
 
 	// Initial data push
 	three.setPointsFromModel();
 	three.setColorsFromModel();
 	three.setAxesFromModel();
 
-	// Make root focusable so Enter/Escape works
-	root.tabIndex = 0;
-
-	// Pointer events (overlay canvas in lasso mode)
-	canvas.addEventListener(
-		"pointerdown",
-		(e) => {
-			const p = pointerInfoFromEvent(e, canvas);
-			if (!p.isInside) return;
-
-			if (state.mode.kind === "lasso") {
-				root.focus();
-				canvas.setPointerCapture(e.pointerId);
-				onPointerDown(state, p);
-				e.preventDefault();
-			}
-		},
-		{ signal: abortController.signal },
-	);
-
-	canvas.addEventListener(
-		"pointermove",
-		(e) => {
-			const p = pointerInfoFromEvent(e, canvas);
-			onPointerMove(state, p);
-		},
-		{ signal: abortController.signal },
-	);
-
-	canvas.addEventListener(
-		"pointerup",
-		(e) => {
-			if (state.mode.kind !== "lasso") return;
-			onPointerUp(state);
-			syncUiFromState();
-			e.preventDefault();
-		},
-		{ signal: abortController.signal },
-	);
-
-	canvas.addEventListener(
-		"pointerleave",
-		() => {
-			state.lastPointer = null;
-		},
-		{ signal: abortController.signal },
-	);
-
-	// Keyboard: commit/cancel
-	root.addEventListener(
-		"keydown",
-		(e) => {
-			if (e.key === "Escape") {
-				cancelLasso(state);
-				syncUiFromState();
-				e.preventDefault();
-			} else if (e.key === "Enter") {
-				const polygonNdc = commitLasso(state);
-				if (polygonNdc) {
-					sendCommittedLasso({
-						model,
-						three,
-						bar,
-						state,
-						polygonNdc,
-					});
-				}
-				syncUiFromState();
-				e.preventDefault();
-			}
-		},
-		{ signal: abortController.signal },
-	);
+	// Initial labels
+	labelsController.refresh();
 
 	// Resize
-	let lastWidth = 0;
-	let lastHeight = 0;
-
-	const stopObserving = observeSize(canvasHost, (canvasWidth, canvasHeight) => {
-		const cssW = Math.round(canvasWidth);
-		const cssH = Math.round(canvasHeight);
-
-		if (
-			Math.abs(cssW - lastWidth) < RESIZE_THRESHOLD_PX &&
-			Math.abs(cssH - lastHeight) < RESIZE_THRESHOLD_PX
-		) {
-			return;
-		}
-		lastWidth = cssW;
-		lastHeight = cssH;
-
-		const { devicePixelRatio, width, height } = resizeCanvas(cssW, cssH);
-		state.dpr = devicePixelRatio;
-		state.pixelWidth = width;
-		state.pixelHeight = height;
-
-		three.setSize(cssW, cssH, devicePixelRatio);
+	const resizeController = createResizeController({
+		canvasHost,
+		three,
+		state,
+		resizeCanvas,
 	});
 
 	// RAF loop: render 3D + overlay
-	let rafId = 0;
-	const frame = () => {
-		three.render();
-		drawOverlay(state, ctx);
-		rafId = requestAnimationFrame(frame);
-	};
-	rafId = requestAnimationFrame(frame);
+	const raf = createRafController({
+		onFrame: () => {
+			three.render();
+			drawOverlay(state, ctx);
+		},
+	});
+	raf.start();
 
 	const cleanup = () => {
+		raf.stop();
 		abortController.abort();
 		modelBindings.dispose();
-		stopObserving();
-		cancelAnimationFrame(rafId);
+		interactionController.dispose();
+		tooltipController.dispose();
+		resizeController.dispose();
 		three.dispose();
 		canvas.remove();
 	};
