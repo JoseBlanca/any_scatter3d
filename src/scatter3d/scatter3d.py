@@ -530,7 +530,7 @@ class Scatter3dWidget(anywidget.AnyWidget):
         if req.get("kind") != "tooltip":
             return
 
-        request_id = req.get("request_id", None)
+        request_id = int(req.get("request_id", 0) or 0)
         i = req.get("i", None)
 
         try:
@@ -555,6 +555,9 @@ class Scatter3dWidget(anywidget.AnyWidget):
                 "status": "error",
                 "message": str(e),
             }
+
+        # Force comm sync (important for anywidget)
+        self.send_state("tooltip_response_t")
 
     def _on_category_changed(self, category: Category, event: str) -> None:
         """

@@ -34,7 +34,6 @@ function isTooltipResponse(x: unknown): x is TooltipResponse {
 	if (r.status !== "ok" && r.status !== "error") return false;
 	if (r.status === "ok" && (!r.data || typeof r.data !== "object"))
 		return false;
-	// message is optional for error
 	return true;
 }
 
@@ -63,6 +62,8 @@ export function createTooltipController(deps: TooltipControllerDeps): {
 
 		const idx = three.pickPointIndex(ndcX, ndcY);
 		if (idx == null) {
+			pendingTooltipReq = null;
+			pendingTooltipPos = null;
 			view.hide();
 			return;
 		}
@@ -84,15 +85,16 @@ export function createTooltipController(deps: TooltipControllerDeps): {
 	threeCanvas.addEventListener("click", onClick, { signal });
 
 	const onTooltipResponseChange = () => {
-		const raw = model.get(TRAITS.tooltipResponse) as unknown;
-		if (!isTooltipResponse(raw)) return;
+		const raw0 = model.get(TRAITS.tooltipResponse) as unknown;
 
-		// Ignore out-of-order responses
-		if (pendingTooltipReq != null && raw.request_id !== pendingTooltipReq)
-			return;
+		if (!isTooltipResponse(raw0)) return;
+		const raw = raw0;
+
+		// We only accept a response if we are waiting for one and ids match
+		if (pendingTooltipReq === null) return;
+		if (raw.request_id !== pendingTooltipReq) return;
 		if (!pendingTooltipPos) return;
 
-		// Consume the pending request. Also clear the counter so next click is clean.
 		pendingTooltipReq = null;
 
 		if (raw.status === "error") {
@@ -104,11 +106,9 @@ export function createTooltipController(deps: TooltipControllerDeps): {
 			return;
 		}
 
-		// ok
-		const rows: Array<[string, string]> = [];
-		for (const [k, v] of Object.entries(raw.data)) {
-			rows.push([String(k), String(v)]);
-		}
+		const rows: Array<[string, string]> = Object.entries(raw.data).map(
+			([k, v]) => [String(k), String(v)],
+		);
 
 		view.showAt(pendingTooltipPos.x, pendingTooltipPos.y, rows);
 	};

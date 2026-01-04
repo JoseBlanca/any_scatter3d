@@ -101,6 +101,9 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 
 		renderControlBar(bar, uiCfg, uiState);
 
+		if (uiState.mode === "lasso") {
+			tooltipView.hide();
+		}
 		// Pointer routing:
 		// - Rotate: interact with three.js canvas (OrbitControls)
 		// - Lasso: interact with overlay canvas
