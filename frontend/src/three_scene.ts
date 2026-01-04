@@ -17,6 +17,9 @@ export type ThreeScene = {
 	setPointsFromModel: () => void;
 	setColorsFromModel: () => void;
 
+	// pick nearest point under mouse
+	pickPointIndex: (ndcX: number, ndcY: number) => number | null;
+
 	// Returns packed bits (bitorder="big") for N points:
 	// byte = i >> 3, bit = 7 - (i & 7)
 	selectMaskInLasso: (polyNdc: { x: number; y: number }[]) => Uint8Array;
@@ -159,6 +162,24 @@ export function createThreeScene(
 
 	const pointsObj = new THREE.Points(geom, mat);
 	scene.add(pointsObj);
+
+	const raycaster = new THREE.Raycaster();
+	raycaster.params.Points = raycaster.params.Points ?? {};
+	// Tune this (world units). Start here and adjust by feel.
+	(raycaster.params.Points as any).threshold = 0.06;
+
+	const ndc = new THREE.Vector2();
+
+	function pickPointIndex(ndcX: number, ndcY: number): number | null {
+		ndc.set(ndcX, ndcY);
+		raycaster.setFromCamera(ndc, camera);
+
+		const hits = raycaster.intersectObject(pointsObj, false);
+		if (!hits.length) return null;
+
+		const idx = (hits[0] as any).index;
+		return Number.isFinite(idx) ? (idx as number) : null;
+	}
 
 	const axesGroup = new THREE.Group();
 	scene.add(axesGroup);
@@ -444,6 +465,7 @@ export function createThreeScene(
 		setSize,
 		setPointsFromModel,
 		setColorsFromModel,
+		pickPointIndex,
 		setAxesFromModel,
 		rebuildAxisLabels,
 		selectMaskInLasso,

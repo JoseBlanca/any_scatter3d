@@ -12,9 +12,14 @@ export const TRAITS = {
 	labels: "labels_t",
 	colors: "colors_t",
 	missingColor: "missing_color_t",
+
 	lassoRequest: "lasso_request_t",
 	lassoMask: "lasso_mask_t",
 	lassoResult: "lasso_result_t",
+
+	tooltipRequest: "tooltip_request_t",
+	tooltipResponse: "tooltip_response_t",
+
 	showAxes: "show_axes_t",
 	pointsSize: "points_size_t",
 	axisLabelSize: "axis_label_size_t",
@@ -45,3 +50,9 @@ export type LassoResult =
 			status: "error";
 			message: string;
 	  };
+
+export type TooltipRequest = { kind: "tooltip"; i: number; req: number };
+
+export type TooltipResponse =
+	| { req?: number; status: "ok"; data: Record<string, unknown> }
+	| { req?: number; status: "error"; message: string };

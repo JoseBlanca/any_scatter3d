@@ -62,7 +62,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		| (() => void);
 	cleanupPrev?.();
 
-	const { root, toolbar, canvasHost } = createWidgetRoot(el);
+	const { root, toolbar, tooltip, canvasHost } = createWidgetRoot(el);
 
 	const abortController = new AbortController();
 
@@ -90,6 +90,18 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 			state.pixelHeight = height;
 			three.setSize(cssW, cssH, devicePixelRatio);
 		}
+	}
+
+	// tooltip
+	function hideTooltip() {
+		tooltip.style.display = "none";
+	}
+
+	function showTooltipAt(cssX: number, cssY: number, html: string) {
+		tooltip.innerHTML = html;
+		tooltip.style.left = `${cssX + 10}px`;
+		tooltip.style.top = `${cssY + 10}px`;
+		tooltip.style.display = "block";
 	}
 
 	// --- UI ---
@@ -246,6 +258,71 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		three.rebuildAxisLabels?.();
 	};
 
+	let tooltipReqCounter = 0;
+	let pendingTooltipReq: number | null = null;
+	let pendingTooltipPos: { x: number; y: number } | null = null;
+
+	three.domElement.addEventListener(
+		"click",
+		(e) => {
+			// ignore clicks during lasso mode
+			if (state.mode.kind === "lasso") return;
+
+			const rect = three.domElement.getBoundingClientRect();
+			const cssX = e.clientX - rect.left;
+			const cssY = e.clientY - rect.top;
+
+			const x01 = rect.width > 0 ? cssX / rect.width : 0;
+			const y01 = rect.height > 0 ? cssY / rect.height : 0;
+
+			const ndcX = x01 * 2 - 1;
+			const ndcY = -(y01 * 2 - 1);
+
+			const idx = three.pickPointIndex(ndcX, ndcY);
+			if (idx == null) {
+				hideTooltip();
+				return;
+			}
+
+			const req = ++tooltipReqCounter;
+			pendingTooltipReq = req;
+			pendingTooltipPos = { x: cssX, y: cssY };
+
+			showTooltipAt(cssX, cssY, "Loading…");
+
+			model.set(TRAITS.tooltipRequest, { kind: "tooltip", i: idx, req });
+			model.save_changes();
+		},
+		{ signal: abortController.signal },
+	);
+	const onTooltipResponseChange = () => {
+		const res = model.get(TRAITS.tooltipResponse) as any;
+		if (!res || typeof res !== "object") return;
+
+		// ignore out-of-order responses
+		const req = (res as any).req;
+		if (pendingTooltipReq != null && req !== pendingTooltipReq) return;
+
+		if (!pendingTooltipPos) return;
+
+		if (res.status === "error") {
+			showTooltipAt(
+				pendingTooltipPos.x,
+				pendingTooltipPos.y,
+				`Error: ${String(res.message ?? "unknown")}`,
+			);
+			return;
+		}
+
+		const data = (res as any).data ?? {};
+		const rows: string[] = [];
+		for (const [k, v] of Object.entries(data)) {
+			rows.push(`<div><b>${k}</b>: ${String(v)}</div>`);
+		}
+		showTooltipAt(pendingTooltipPos.x, pendingTooltipPos.y, rows.join(""));
+	};
+
+	model.on(`change:${TRAITS.tooltipResponse}`, onTooltipResponseChange);
 	model.on(`change:${TRAITS.xyzBytes}`, onXYZChange);
 	model.on(`change:${TRAITS.codedValues}`, onColorsRelatedChange);
 	model.on(`change:${TRAITS.colors}`, onColorsRelatedChange);
@@ -381,6 +458,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		model.off(`change:${TRAITS.lassoResult}`, onLassoResultChange);
 		model.off(`change:${TRAITS.showAxes}`, onShowAxesChange);
 		model.off(`change:${TRAITS.axisLabelSize}`, onAxisLabelSizeChange);
+		model.off(`change:${TRAITS.tooltipResponse}`, onTooltipResponseChange);
 
 		stopObserving();
 		cancelAnimationFrame(rafId);

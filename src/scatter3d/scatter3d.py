@@ -451,6 +451,9 @@ class Scatter3dWidget(anywidget.AnyWidget):
         help=("Whether to draw axis lines (X, Y, Z) from the origin (0,0,0)."),
     ).tag(sync=True)
 
+    tooltip_request_t = traitlets.Dict(default_value={}).tag(sync=True)
+    tooltip_response_t = traitlets.Dict(default_value={}).tag(sync=True)
+
     def __init__(
         self,
         xyz: numpy.ndarray,
@@ -485,6 +488,9 @@ class Scatter3dWidget(anywidget.AnyWidget):
 
         self.point_ids = self._normalize_point_ids(point_ids)
 
+        # clear tooltip state
+        self.tooltip_response_t = {}
+
     def _normalize_point_ids(self, point_ids):
         num_points = self.num_points
 
@@ -505,6 +511,52 @@ class Scatter3dWidget(anywidget.AnyWidget):
             raise ValueError("point_ids length must match number of points")
 
         return point_ids
+
+    def _category_label_for_index(self, idx: int) -> str | None:
+        if self._category is None:
+            return None
+        coded = self._category.coded_values
+        code = int(coded[idx])
+        if code <= 0:
+            return None
+        # label_list is 0-based, codes are 1..K
+        return str(self._category.label_list[code - 1])
+
+    @traitlets.observe("tooltip_request_t")
+    def _on_tooltip_request(self, change) -> None:
+        req = change["new"] or {}
+        if not isinstance(req, dict):
+            return
+
+        # expected payload: {"kind": "tooltip", "i": <int>, "req": <int>}
+        if req.get("kind") != "tooltip":
+            return
+
+        request_id = req.get("req", None)
+        i = req.get("i", None)
+
+        try:
+            i = int(i)
+            if i < 0 or i >= self.num_points:
+                raise IndexError(f"point index out of range: {i}")
+
+            data = {
+                "idx": i,
+                "id": str(self.point_ids[i]),
+                "category": self._category_label_for_index(i),
+            }
+
+            self.tooltip_response_t = {
+                "req": request_id,
+                "status": "ok",
+                "data": data,
+            }
+        except Exception as e:
+            self.tooltip_response_t = {
+                "req": request_id,
+                "status": "error",
+                "message": str(e),
+            }
 
     def _on_category_changed(self, category: Category, event: str) -> None:
         """

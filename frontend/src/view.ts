@@ -66,11 +66,25 @@ export function createWidgetRoot(el: HTMLElement) {
 	canvasHost.style.position = "relative";
 	canvasHost.style.overflow = "hidden";
 
+	const tooltip = document.createElement("div");
+	tooltip.style.position = "absolute";
+	tooltip.style.zIndex = "5";
+	tooltip.style.pointerEvents = "none";
+	tooltip.style.background = "rgba(0,0,0,0.8)";
+	tooltip.style.color = "white";
+	tooltip.style.padding = "6px 8px";
+	tooltip.style.borderRadius = "6px";
+	tooltip.style.fontSize = "12px";
+	tooltip.style.maxWidth = "320px";
+	tooltip.style.display = "none";
+	tooltip.style.whiteSpace = "pre-wrap";
+	canvasHost.appendChild(tooltip);
+
 	root.appendChild(toolbar);
 	root.appendChild(canvasHost);
 	el.appendChild(root);
 
-	return { root, toolbar, canvasHost };
+	return { root, toolbar, tooltip, canvasHost };
 }
 
 export function observeSize(
