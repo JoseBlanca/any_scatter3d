@@ -26,7 +26,6 @@ def _():
     w.axis_label_size = 1
     ui = marimo.ui.anywidget(w)
     ui
-
     return species, ui, w
 
 

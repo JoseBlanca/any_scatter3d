@@ -9,6 +9,7 @@ import { createInteractionController } from "./interaction_controller";
 import { createResizeController } from "./resize_controller";
 import { createRafController } from "./raf_controller";
 import { createLabelsController } from "./labels_controller";
+import { createTooltipView } from "./tooltip_view";
 
 export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 	const cleanupPrev = (el as any).__any_scatter3d_cleanup as
@@ -33,56 +34,7 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 	const state = createInteractionState();
 
 	// tooltip
-	function hideTooltip() {
-		tooltip.style.display = "none";
-	}
-
-	function positionTooltip(cssX: number, cssY: number) {
-		tooltip.style.left = `${cssX + 10}px`;
-		tooltip.style.top = `${cssY + 10}px`;
-		tooltip.style.display = "block";
-	}
-
-	function clearTooltip() {
-		tooltip.replaceChildren();
-	}
-
-	function showLoadingAt(cssX: number, cssY: number) {
-		clearTooltip();
-		tooltip.textContent = "Loading…";
-		positionTooltip(cssX, cssY);
-	}
-
-	function showErrorAt(cssX: number, cssY: number, message: string) {
-		clearTooltip();
-		tooltip.textContent = `Error: ${message}`;
-		positionTooltip(cssX, cssY);
-	}
-
-	function showAt(cssX: number, cssY: number, rows: Array<[string, string]>) {
-		clearTooltip();
-
-		for (const [k, v] of rows) {
-			const row = document.createElement("div");
-
-			const b = document.createElement("b");
-			b.textContent = k;
-
-			row.appendChild(b);
-			row.append(`: ${v}`);
-
-			tooltip.appendChild(row);
-		}
-
-		positionTooltip(cssX, cssY);
-	}
-
-	const tooltipView = {
-		hide: hideTooltip,
-		showAt,
-		showLoadingAt,
-		showErrorAt,
-	};
+	const tooltipView = createTooltipView(tooltip);
 
 	// --- UI ---
 	const uiCfg = DEFAULT_UI_CONFIG;
@@ -141,6 +93,10 @@ export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
 		three,
 		refreshLabelsUI: labelsController.refresh,
 		onTooltipResponseChange: tooltipController.onTooltipResponseChange,
+	});
+
+	model.on("change:tooltip_response_t", () => {
+		console.log("RAW tooltip_response_t =", model.get("tooltip_response_t"));
 	});
 
 	// Initial data push
