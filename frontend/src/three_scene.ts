@@ -206,7 +206,7 @@ export function createThreeScene(
 		let max = -Infinity;
 
 		for (let i = 0; i < posArr.length; i++) {
-			const v = posArr[i];
+			const v = Math.abs(posArr[i]);
 			if (v > max) max = v;
 		}
 

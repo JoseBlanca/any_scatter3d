@@ -484,12 +484,20 @@ class Scatter3dWidget(anywidget.AnyWidget):
         self._xyz = None
         self._category = None
         self.xyz = xyz
+
+        self._set_default_sizes()
+
         self.category = category
 
         self.point_ids = self._normalize_point_ids(point_ids)
 
         # clear tooltip state
         self.tooltip_response_t = {}
+
+    def _set_default_sizes(self):
+        max = float(numpy.abs(self.xyz).max())
+        self.point_size_t = max / 20.0
+        self.axis_label_size_t = max / 5.0
 
     def _normalize_point_ids(self, point_ids):
         num_points = self.num_points
