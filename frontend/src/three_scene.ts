@@ -1,4 +1,3 @@
-// frontend/src/three_scene.ts
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { WidgetModel, RGB } from "./model";
@@ -98,6 +97,21 @@ function readRGB(x: unknown, name: string): RGB {
 	return [r, g, b];
 }
 
+// Intentionally untyped trait getter for legacy / unknown traits.
+// Keep it isolated so the rest of the file stays type-safe.
+function getUntypedStringTrait(
+	model: WidgetModel,
+	key: string,
+	fallback: string,
+): string {
+	const v = (model as any).get?.(key);
+	return typeof v === "string" && v.length ? v : fallback;
+}
+
+function getPositiveFiniteNumber(v: unknown, fallback: number): number {
+	return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : fallback;
+}
+
 export function createThreeScene(
 	canvasHost: HTMLElement,
 	model: WidgetModel,
@@ -107,7 +121,7 @@ export function createThreeScene(
 	canvasHost.appendChild(renderer.domElement);
 
 	// background might still exist as a traitlet in your widget; if not, default.
-	const bg = String((model.get("background") as any) ?? "#ffffff");
+	const bg = getUntypedStringTrait(model, "background", "#ffffff");
 	renderer.setClearColor(new THREE.Color(bg), 1);
 
 	const scene = new THREE.Scene();
@@ -150,12 +164,12 @@ export function createThreeScene(
 	geom.computeBoundingSphere();
 	frameCameraToGeometry();
 
-	// point size traitlet might still exist; default if not.
-	const initialPointSize =
-		Number((model.get("point_size_t") as any) ?? 0.05) || 0.05;
+	function getPointSize(): number {
+		return getPositiveFiniteNumber(model.get(TRAITS.pointSize), 0.05);
+	}
 
 	const mat = new THREE.PointsMaterial({
-		size: initialPointSize,
+		size: getPointSize(),
 		sizeAttenuation: true,
 		vertexColors: true,
 	});
@@ -238,50 +252,8 @@ export function createThreeScene(
 		attr.needsUpdate = true;
 	}
 
-	function setAxesFromModel() {
-		const show = Boolean(model.get(TRAITS.showAxes));
-		axesGroup.visible = show;
-
-		if (!show) return;
-
-		const pos = geom.getAttribute("position") as THREE.BufferAttribute;
-		const arr = pos.array as Float32Array;
-		const { max } = computeMaxXYZ(arr);
-
-		// from origin to maxima on each axis
-		setLinePositions(xAxis, 0, 0, 0, max, 0, 0);
-		setLinePositions(zAxis, 0, 0, 0, 0, max, 0);
-		setLinePositions(yAxis, 0, 0, 0, 0, 0, max);
-
-		const pad = max * 0.03; // 3% past the tip
-		xLabel.position.set(max + pad, 0, 0);
-		yLabel.position.set(0, 0, max + pad);
-		zLabel.position.set(0, max + pad, 0);
-	}
-
 	function getAxisLabelSize(): number {
-		const v = Number((model.get(TRAITS.axisLabelSize) as any) ?? 0.05);
-		return Number.isFinite(v) && v > 0 ? v : 0.05;
-	}
-
-	function rebuildAxisLabels() {
-		// remove old sprites
-		axesGroup.remove(xLabel, yLabel, zLabel);
-
-		// IMPORTANT: dispose old GPU resources to avoid leaks
-		for (const s of [xLabel, yLabel, zLabel]) {
-			const m = s.material as THREE.SpriteMaterial;
-			m.map?.dispose();
-			m.dispose();
-		}
-
-		const size = getAxisLabelSize();
-		xLabel = makeAxisLabelSprite("x", size);
-		yLabel = makeAxisLabelSprite("y", size);
-		zLabel = makeAxisLabelSprite("z", size);
-		axesGroup.add(xLabel, yLabel, zLabel);
-
-		setAxesFromModel();
+		return getPositiveFiniteNumber(model.get(TRAITS.axisLabelSize), 0.05);
 	}
 
 	function makeAxisLabelSprite(
@@ -325,18 +297,54 @@ export function createThreeScene(
 		});
 
 		const sprite = new THREE.Sprite(mat);
-
 		sprite.scale.set(size, size, 1);
-
 		return sprite;
 	}
 
-	const initialSize = getAxisLabelSize();
-	let xLabel = makeAxisLabelSprite("x", initialSize);
-	let yLabel = makeAxisLabelSprite("y", initialSize);
-	let zLabel = makeAxisLabelSprite("z", initialSize);
-
+	let xLabel = makeAxisLabelSprite("x", getAxisLabelSize());
+	let yLabel = makeAxisLabelSprite("y", getAxisLabelSize());
+	let zLabel = makeAxisLabelSprite("z", getAxisLabelSize());
 	axesGroup.add(xLabel, yLabel, zLabel);
+
+	function setAxesFromModel() {
+		const show = model.get(TRAITS.showAxes) === true;
+		axesGroup.visible = show;
+		if (!show) return;
+
+		const pos = geom.getAttribute("position") as THREE.BufferAttribute;
+		const arr = pos.array as Float32Array;
+		const { max } = computeMaxXYZ(arr);
+
+		// from origin to maxima on each axis
+		setLinePositions(xAxis, 0, 0, 0, max, 0, 0);
+		setLinePositions(zAxis, 0, 0, 0, 0, max, 0);
+		setLinePositions(yAxis, 0, 0, 0, 0, 0, max);
+
+		const pad = max * 0.03; // 3% past the tip
+		xLabel.position.set(max + pad, 0, 0);
+		yLabel.position.set(0, 0, max + pad);
+		zLabel.position.set(0, max + pad, 0);
+	}
+
+	function rebuildAxisLabels() {
+		// remove old sprites
+		axesGroup.remove(xLabel, yLabel, zLabel);
+
+		// IMPORTANT: dispose old GPU resources to avoid leaks
+		for (const s of [xLabel, yLabel, zLabel]) {
+			const m = s.material as THREE.SpriteMaterial;
+			m.map?.dispose();
+			m.dispose();
+		}
+
+		const size = getAxisLabelSize();
+		xLabel = makeAxisLabelSprite("x", size);
+		yLabel = makeAxisLabelSprite("y", size);
+		zLabel = makeAxisLabelSprite("z", size);
+		axesGroup.add(xLabel, yLabel, zLabel);
+
+		setAxesFromModel();
+	}
 
 	function setPointsFromModel() {
 		const arr = positionsFromXYZBytes(model.get(TRAITS.xyzBytes));
@@ -458,6 +466,13 @@ export function createThreeScene(
 		renderer.forceContextLoss();
 		renderer.domElement.remove();
 		scene.remove(pointsObj);
+
+		// Dispose axis label resources too
+		for (const s of [xLabel, yLabel, zLabel]) {
+			const m = s.material as THREE.SpriteMaterial;
+			m.map?.dispose();
+			m.dispose();
+		}
 	}
 
 	return {

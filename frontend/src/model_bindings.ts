@@ -1,4 +1,4 @@
-import type { WidgetModel, LassoResult } from "./model";
+import type { WidgetModel } from "./model";
 import { TRAITS } from "./model";
 import type { createThreeScene } from "./three_scene";
 
@@ -33,23 +33,23 @@ export function bindModelToView(deps: ModelBindingsDeps): {
 	};
 
 	const onLassoResultChange = () => {
-		const res = model.get(TRAITS.lassoResult) as LassoResult | unknown;
-		if (!res || typeof res !== "object") return;
-		const status = (res as any).status;
-		if (status === "error") {
-			console.error("Lasso error:", (res as any).message ?? res);
+		const res = model.get(TRAITS.lassoResult);
+		if (!res) return;
+
+		if (res.status === "error") {
+			console.error("Lasso error:", res.message);
 		}
 	};
 
 	const onShowAxesChange = () => {
 		three.setAxesFromModel();
-		if (model.get(TRAITS.showAxes)) {
+		if (model.get(TRAITS.showAxes) === true) {
 			three.rebuildAxisLabels?.();
 		}
 	};
 
 	const onAxisLabelSizeChange = () => {
-		if (!model.get(TRAITS.showAxes)) return;
+		if (model.get(TRAITS.showAxes) !== true) return;
 		three.rebuildAxisLabels?.();
 	};
 
