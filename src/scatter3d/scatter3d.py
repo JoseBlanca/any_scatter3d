@@ -12,7 +12,6 @@ import traitlets
 import numpy
 import pandas
 import narwhals
-import marimo
 
 
 PACKAGE_DIR = Path(__file__).parent
@@ -465,6 +464,28 @@ class Scatter3dWidget(anywidget.AnyWidget):
         help="True once frontend has announced readiness; used to gate UI features.",
     ).tag(sync=True)
 
+    interaction_mode_t = traitlets.Unicode(
+        default_value="rotate",
+        help="Interaction mode: 'rotate' or 'lasso'.",
+    ).tag(sync=True)
+
+    # Active category label (string). In lasso mode it must always be non-empty and valid.
+    active_category_t = traitlets.Unicode(
+        default_value="",
+        help="Active category label. In lasso mode it must be set to one of labels_t.",
+    ).tag(sync=True)
+
+    # Legend placement (split into two validated strings; easier to validate than a Dict schema)
+    legend_side_t = traitlets.Unicode(
+        default_value="right",
+        help="Legend side: 'left' or 'right'.",
+    ).tag(sync=True)
+
+    legend_dock_t = traitlets.Unicode(
+        default_value="top",
+        help="Legend dock: 'top' or 'bottom'.",
+    ).tag(sync=True)
+
     def __init__(
         self,
         xyz: numpy.ndarray,
@@ -504,6 +525,78 @@ class Scatter3dWidget(anywidget.AnyWidget):
 
         # clear tooltip state
         self.tooltip_response_t = {}
+
+        # Enforce initial invariants (rotate default allows empty active category)
+        self._ensure_active_category_invariants()
+
+    @traitlets.validate("interaction_mode_t")
+    def _validate_interaction_mode_t(self, proposal):
+        v = proposal["value"]
+        if v not in ("rotate", "lasso"):
+            raise traitlets.TraitError("interaction_mode_t must be 'rotate' or 'lasso'")
+        return v
+
+    @traitlets.validate("legend_side_t")
+    def _validate_legend_side_t(self, proposal):
+        v = proposal["value"]
+        if v not in ("left", "right"):
+            raise traitlets.TraitError("legend_side_t must be 'left' or 'right'")
+        return v
+
+    @traitlets.validate("legend_dock_t")
+    def _validate_legend_dock_t(self, proposal):
+        v = proposal["value"]
+        if v not in ("top", "bottom"):
+            raise traitlets.TraitError("legend_dock_t must be 'top' or 'bottom'")
+        return v
+
+    def _ensure_active_category_invariants(self) -> None:
+        """
+        Enforce invariants for interaction_mode_t and active_category_t.
+        - In lasso mode, active_category_t must be a valid label and non-empty.
+          If empty/invalid, set deterministically to first label in labels_t.
+        - In rotate mode, empty active_category_t is allowed.
+          If non-empty but invalid, raise (no silent fallback).
+        """
+        mode = self.interaction_mode_t
+        labels = list(self.labels_t or [])
+
+        if mode == "lasso":
+            if not labels:
+                # Professional behavior: lasso mode without categories is a hard error.
+                raise RuntimeError("Cannot enter lasso mode: labels_t is empty")
+
+            if self.active_category_t in labels:
+                return
+
+            # Required deterministic behavior: choose the first category label.
+            self.active_category_t = labels[0]
+            self.send_state("active_category_t")
+            return
+
+        # rotate mode
+        if self.active_category_t == "":
+            return
+        if self.active_category_t not in labels:
+            # No silent fallback in rotate mode: invalid state must surface.
+            raise RuntimeError(
+                f"active_category_t={self.active_category_t!r} is not present in labels_t"
+            )
+
+    @traitlets.observe("interaction_mode_t")
+    def _on_interaction_mode_t(self, change) -> None:
+        # If user toggles into lasso, enforce invariants immediately.
+        self._ensure_active_category_invariants()
+
+    @traitlets.observe("active_category_t")
+    def _on_active_category_t(self, change) -> None:
+        # Prevent clearing in lasso mode (and prevent invalid labels in general).
+        self._ensure_active_category_invariants()
+
+    @traitlets.observe("labels_t")
+    def _on_labels_t(self, change) -> None:
+        # Labels can change if Category label_list changes; ensure active remains valid.
+        self._ensure_active_category_invariants()
 
     @traitlets.observe("client_ready_t")
     def _on_client_ready_t(self, change) -> None:
@@ -625,7 +718,7 @@ class Scatter3dWidget(anywidget.AnyWidget):
             raise RuntimeError("xyz has not been set")
         out = self._xyz.copy()
         out[:, [1, 2]] = out[:, [2, 1]]
-        return self._xyz.copy()
+        return out
 
     def _set_xyz(self, xyz: numpy.ndarray) -> None:
         xyz_f32, xyz_bytes = self._pack_xyz_float32_c(xyz)
@@ -678,6 +771,11 @@ class Scatter3dWidget(anywidget.AnyWidget):
 
         # missing color
         self.missing_color_t = list(map(float, cat.missing_color))
+
+        if len(self.colors_t) != len(self.labels_t):
+            raise RuntimeError(
+                "Internal error: colors_t length must match labels_t length"
+            )
 
     def _get_category(self):
         return self._category
