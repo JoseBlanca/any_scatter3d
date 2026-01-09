@@ -35,7 +35,7 @@ vi.mock("../src/tooltip_controller", () => ({
 }));
 
 vi.mock("../src/labels_controller", () => ({
-	createLabelsController: () => ({ refresh: vi.fn() }),
+	createLabelsController: () => ({ refresh: vi.fn(), dispose: vi.fn() }),
 }));
 
 // NOTE: do NOT mock interaction_controller or resize_controller here; we want real logic.

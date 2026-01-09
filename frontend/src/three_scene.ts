@@ -33,9 +33,12 @@ export type ThreeScene = {
 type Point2D = { x: number; y: number };
 
 const BLACK = "#000";
+// NOTE: Data-analysis convention:
+// Z is drawn "upwards" (screen Y), Y is depth.
+// This is intentional: do NOT "fix" unless changing conventions.
 const X_AXIS_COLOR = BLACK;
-const Y_AXIS_COLOR = BLACK;
-const Z_AXIS_COLOR = BLACK;
+const Y_AXIS_COLOR = BLACK; // depth
+const Z_AXIS_COLOR = BLACK; // vertical (up)
 
 function positionsFromXYZBytes(xyzBytes: unknown): Float32Array {
 	const f32 = bytesToFloat32ArrayLE(xyzBytes);
@@ -316,6 +319,9 @@ export function createThreeScene(
 		const { max } = computeMaxXYZ(arr);
 
 		// from origin to maxima on each axis
+		// Intentionally swapped:
+		//   Z → up (screen Y)
+		//   Y → depth (screen Z)
 		setLinePositions(xAxis, 0, 0, 0, max, 0, 0);
 		setLinePositions(zAxis, 0, 0, 0, 0, max, 0);
 		setLinePositions(yAxis, 0, 0, 0, 0, 0, max);

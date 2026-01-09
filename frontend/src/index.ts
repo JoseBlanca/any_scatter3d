@@ -3,7 +3,8 @@ import type { WidgetModel } from "./model";
 import { TRAITS } from "./model";
 import { createWidgetRoot, createOverlayCanvas, get2dContext } from "./view";
 import { createInteractionState, drawOverlay } from "./interaction";
-import { createControlBar, renderControlBar, DEFAULT_UI_CONFIG } from "./ui";
+import { DEFAULT_UI_CONFIG } from "./ui_config";
+import { createControlBar, renderControlBar } from "./ui";
 import { createThreeScene } from "./three_scene";
 import { bindModelToView } from "./model_bindings";
 import { createTooltipController } from "./tooltip_controller";
@@ -331,6 +332,7 @@ export function buildWidget(
 		abortController.abort();
 
 		// Dispose in roughly reverse creation order
+		labelsController.dispose();
 		modelBindings.dispose();
 		interactionController.dispose();
 		tooltipController.dispose();

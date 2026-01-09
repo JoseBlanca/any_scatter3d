@@ -40,14 +40,24 @@ export type LabelsControllerDeps = {
 
 export function createLabelsController(deps: LabelsControllerDeps): {
 	refresh: () => void;
+	dispose: () => void;
 } {
 	const { model, select } = deps;
 
+	const refresh = () => {
+		const labels = getLabelsFromModel(model);
+		const prev = select.value;
+		populateLabelSelect(select, labels, prev);
+	};
+
+	// Subscribe internally (robust against forgotten wiring).
+	const onLabelsChanged = () => refresh();
+	model.on(`change:${TRAITS.labels}`, onLabelsChanged);
+
 	return {
-		refresh: () => {
-			const labels = getLabelsFromModel(model);
-			const prev = select.value;
-			populateLabelSelect(select, labels, prev);
+		refresh,
+		dispose: () => {
+			model.off(`change:${TRAITS.labels}`, onLabelsChanged);
 		},
 	};
 }

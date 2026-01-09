@@ -1,51 +1,49 @@
 import type { WidgetModel } from "./model";
 import { TRAITS } from "./model";
-import type { createThreeScene } from "./three_scene";
+import type { ThreeScene } from "./three_scene";
 
 export type ModelBindingsDeps = {
 	model: WidgetModel;
-	three: ReturnType<typeof createThreeScene>;
+	three: ThreeScene;
 
-	// invoked when labels trait changes
-	refreshLabelsUI: () => void;
+	// invoked when legend-related traits change
+	refreshLegendUI: () => void;
 
-	// tooltip response handler (kept separate; Step 2 will own it)
+	// tooltip response handler
 	onTooltipResponseChange: () => void;
 };
 
 export function bindModelToView(deps: ModelBindingsDeps): {
 	dispose: () => void;
 } {
-	const { model, three, refreshLabelsUI, onTooltipResponseChange } = deps;
+	const { model, three, refreshLegendUI, onTooltipResponseChange } = deps;
 
 	const onXYZChange = () => {
 		three.setPointsFromModel();
+		// safe + robust: points changed => colors need reapply
 		three.setColorsFromModel();
 	};
 
-	const onColorsRelatedChange = () => {
+	// Legend traits changed: refresh legend UI and recolor points (robust path)
+	const onLegendChange = () => {
+		refreshLegendUI();
 		three.setColorsFromModel();
 	};
 
-	const onLabelsChange = () => {
-		refreshLabelsUI();
+	// Non-legend changes that still affect point colors (coded values)
+	const onCodedValuesChange = () => {
 		three.setColorsFromModel();
 	};
 
 	const onLassoResultChange = () => {
 		const res = model.get(TRAITS.lassoResult);
 		if (!res) return;
-
-		if (res.status === "error") {
-			console.error("Lasso error:", res.message);
-		}
+		if (res.status === "error") console.error("Lasso error:", res.message);
 	};
 
 	const onShowAxesChange = () => {
 		three.setAxesFromModel();
-		if (model.get(TRAITS.showAxes) === true) {
-			three.rebuildAxisLabels?.();
-		}
+		if (model.get(TRAITS.showAxes) === true) three.rebuildAxisLabels?.();
 	};
 
 	const onAxisLabelSizeChange = () => {
@@ -53,27 +51,38 @@ export function bindModelToView(deps: ModelBindingsDeps): {
 		three.rebuildAxisLabels?.();
 	};
 
+	// Wire events
 	model.on(`change:${TRAITS.tooltipResponse}`, onTooltipResponseChange);
+
 	model.on(`change:${TRAITS.xyzBytes}`, onXYZChange);
-	model.on(`change:${TRAITS.codedValues}`, onColorsRelatedChange);
-	model.on(`change:${TRAITS.colors}`, onColorsRelatedChange);
+
+	// Colors depend on codedValues but legend does not
+	model.on(`change:${TRAITS.codedValues}`, onCodedValuesChange);
+
+	// Legend-related traits (also recolor points for robustness)
+	model.on(`change:${TRAITS.labels}`, onLegendChange);
+	model.on(`change:${TRAITS.colors}`, onLegendChange);
+	model.on(`change:${TRAITS.missingColor}`, onLegendChange);
+
 	model.on(`change:${TRAITS.showAxes}`, onShowAxesChange);
-	model.on(`change:${TRAITS.missingColor}`, onColorsRelatedChange);
-	model.on(`change:${TRAITS.labels}`, onLabelsChange);
-	model.on(`change:${TRAITS.lassoResult}`, onLassoResultChange);
 	model.on(`change:${TRAITS.axisLabelSize}`, onAxisLabelSizeChange);
+	model.on(`change:${TRAITS.lassoResult}`, onLassoResultChange);
 
 	return {
 		dispose: () => {
+			model.off(`change:${TRAITS.tooltipResponse}`, onTooltipResponseChange);
+
 			model.off(`change:${TRAITS.xyzBytes}`, onXYZChange);
-			model.off(`change:${TRAITS.codedValues}`, onColorsRelatedChange);
-			model.off(`change:${TRAITS.colors}`, onColorsRelatedChange);
-			model.off(`change:${TRAITS.missingColor}`, onColorsRelatedChange);
-			model.off(`change:${TRAITS.labels}`, onLabelsChange);
-			model.off(`change:${TRAITS.lassoResult}`, onLassoResultChange);
+
+			model.off(`change:${TRAITS.codedValues}`, onCodedValuesChange);
+
+			model.off(`change:${TRAITS.labels}`, onLegendChange);
+			model.off(`change:${TRAITS.colors}`, onLegendChange);
+			model.off(`change:${TRAITS.missingColor}`, onLegendChange);
+
 			model.off(`change:${TRAITS.showAxes}`, onShowAxesChange);
 			model.off(`change:${TRAITS.axisLabelSize}`, onAxisLabelSizeChange);
-			model.off(`change:${TRAITS.tooltipResponse}`, onTooltipResponseChange);
+			model.off(`change:${TRAITS.lassoResult}`, onLassoResultChange);
 		},
 	};
 }

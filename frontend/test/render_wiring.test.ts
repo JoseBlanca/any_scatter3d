@@ -47,7 +47,7 @@ vi.mock("../src/tooltip_controller", () => ({
 	}),
 }));
 vi.mock("../src/labels_controller", () => ({
-	createLabelsController: () => ({ refresh: vi.fn() }),
+	createLabelsController: () => ({ refresh: vi.fn(), dispose: vi.fn() }),
 }));
 
 // These are “pure DOM” and usually don’t need mocking,

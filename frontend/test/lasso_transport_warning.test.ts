@@ -34,7 +34,7 @@ vi.mock("../src/tooltip_controller", () => ({
 }));
 
 vi.mock("../src/labels_controller", () => ({
-	createLabelsController: () => ({ refresh: vi.fn() }),
+	createLabelsController: () => ({ refresh: vi.fn(), dispose: vi.fn() }),
 }));
 
 function makeNonInteractiveModel(): WidgetModel {
