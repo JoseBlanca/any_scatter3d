@@ -79,7 +79,7 @@ export type TraitValueMap = {
 	[TRAITS.missingColor]: RGB | null | undefined;
 
 	[TRAITS.lassoRequest]: LassoRequest | null | undefined;
-	[TRAITS.lassoMask]: BytesLike; // packed bitmask, usually bytes
+	[TRAITS.lassoMask]: string; // <-- base64 string
 	[TRAITS.lassoResult]: LassoResult | null | undefined;
 
 	[TRAITS.pointSize]: number | null | undefined;
