@@ -12,13 +12,6 @@ def _():
     import numpy as np
     import pandas
 
-
-    import scatter3d
-    print("scatter3d module file:", scatter3d.__file__)
-
-
-
-
     num_points = 100
 
     point_ids = [f"id_{i}" for i in range(1, num_points + 1)]
