@@ -41,6 +41,7 @@ export type ControlBar = {
 	addBtn: HTMLButtonElement;
 	removeBtn: HTMLButtonElement;
 	labelSelect: HTMLSelectElement;
+	messageEl: HTMLSpanElement;
 };
 
 export function createControlBar(
@@ -54,6 +55,8 @@ export function createControlBar(
 
 	const lassoBtn = document.createElement("button");
 	lassoBtn.textContent = "Lasso";
+	lassoBtn.dataset.testid = "mode-lasso";
+	rotateBtn.dataset.testid = "mode-rotate";
 
 	const addBtn = document.createElement("button");
 	addBtn.textContent = "Add";
@@ -62,6 +65,14 @@ export function createControlBar(
 	removeBtn.textContent = "Remove";
 
 	const labelSelect = document.createElement("select");
+	labelSelect.dataset.testid = "label-select";
+
+	const messageEl = document.createElement("span");
+	messageEl.dataset.testid = "ui-message";
+	messageEl.style.marginLeft = "8px";
+	messageEl.style.fontSize = "12px";
+	messageEl.style.color = "#b91c1c";
+	messageEl.style.display = "none";
 
 	for (const b of [rotateBtn, lassoBtn, addBtn, removeBtn]) {
 		b.style.padding = cfg.buttons.padding;
@@ -76,6 +87,7 @@ export function createControlBar(
 	toolbar.appendChild(addBtn);
 	toolbar.appendChild(removeBtn);
 	toolbar.appendChild(labelSelect);
+	toolbar.appendChild(messageEl);
 
 	return {
 		el: toolbar,
@@ -84,6 +96,7 @@ export function createControlBar(
 		addBtn,
 		removeBtn,
 		labelSelect,
+		messageEl,
 	};
 }
 

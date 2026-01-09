@@ -1,3 +1,4 @@
+// resize_controller.ts
 import { observeSize } from "./view";
 import type { createThreeScene } from "./three_scene";
 import type { InteractionState } from "./interaction";
@@ -13,62 +14,75 @@ export type ResizeControllerDeps = {
 	state: InteractionState;
 	resizeCanvas: ResizeCanvasFn;
 
-	// avoid thrashing during tiny layout jitter
 	resizeThresholdPx?: number;
+	onFirstValidSize?: (cssW: number, cssH: number, dpr: number) => void;
 };
 
-export function createResizeController(deps: ResizeControllerDeps): {
+export type ResizeController = {
+	applyNow: () => void;
 	dispose: () => void;
-} {
+};
+
+export function createResizeController(
+	deps: ResizeControllerDeps,
+): ResizeController {
 	const {
 		canvasHost,
 		three,
 		state,
 		resizeCanvas,
 		resizeThresholdPx = 2,
+		onFirstValidSize,
 	} = deps;
 
-	let lastWidth = 0;
-	let lastHeight = 0;
+	let lastCssW = 0;
+	let lastCssH = 0;
+	let firedFirstValid = false;
 
-	const stopObserving = observeSize(canvasHost, (canvasWidth, canvasHeight) => {
-		const cssW = Math.round(canvasWidth);
-		const cssH = Math.round(canvasHeight);
+	function apply(cssW: number, cssH: number) {
+		const nextW = Math.max(0, Math.round(cssW));
+		const nextH = Math.max(0, Math.round(cssH));
+		if (nextW === 0 || nextH === 0) return;
 
+		const isFirstValid = lastCssW === 0 || lastCssH === 0;
+
+		// Jitter guard, but never block the first valid sizing
 		if (
-			Math.abs(cssW - lastWidth) < resizeThresholdPx &&
-			Math.abs(cssH - lastHeight) < resizeThresholdPx
+			!isFirstValid &&
+			Math.abs(nextW - lastCssW) < resizeThresholdPx &&
+			Math.abs(nextH - lastCssH) < resizeThresholdPx
 		) {
 			return;
 		}
 
-		lastWidth = cssW;
-		lastHeight = cssH;
+		lastCssW = nextW;
+		lastCssH = nextH;
 
-		const { devicePixelRatio, width, height } = resizeCanvas(cssW, cssH);
+		const { devicePixelRatio, width, height } = resizeCanvas(nextW, nextH);
+
 		state.dpr = devicePixelRatio;
 		state.pixelWidth = width;
 		state.pixelHeight = height;
 
-		three.setSize(cssW, cssH, devicePixelRatio);
-	});
+		three.setSize(nextW, nextH, devicePixelRatio);
 
-	const r = canvasHost.getBoundingClientRect();
-	const cssW = Math.round(r.width);
-	const cssH = Math.round(r.height);
-	if (cssW > 0 && cssH > 0) {
-		const { devicePixelRatio, width, height } = resizeCanvas(cssW, cssH);
-		state.dpr = devicePixelRatio;
-		state.pixelWidth = width;
-		state.pixelHeight = height;
-		three.setSize(cssW, cssH, devicePixelRatio);
-		lastWidth = cssW;
-		lastHeight = cssH;
+		if (!firedFirstValid) {
+			firedFirstValid = true;
+			onFirstValidSize?.(nextW, nextH, devicePixelRatio);
+		}
 	}
 
+	function applyNow() {
+		const r = canvasHost.getBoundingClientRect();
+		apply(r.width, r.height);
+	}
+
+	const stopObserving = observeSize(canvasHost, (w, h) => apply(w, h));
+
+	applyNow();
+
 	return {
-		dispose: () => {
-			stopObserving();
-		},
+		applyNow,
+		dispose: () => stopObserving(),
 	};
 }

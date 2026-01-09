@@ -12,6 +12,7 @@ import traitlets
 import numpy
 import pandas
 import narwhals
+import marimo
 
 
 PACKAGE_DIR = Path(__file__).parent
@@ -454,6 +455,16 @@ class Scatter3dWidget(anywidget.AnyWidget):
     tooltip_request_t = traitlets.Dict(default_value={}).tag(sync=True)
     tooltip_response_t = traitlets.Dict(default_value={}).tag(sync=True)
 
+    client_ready_t = traitlets.Bool(
+        default_value=False,
+        help="Set True by the frontend once JS is initialized and can talk to Python.",
+    ).tag(sync=True)
+
+    interactive_ready_t = traitlets.Bool(
+        default_value=False,
+        help="True once frontend has announced readiness; used to gate UI features.",
+    ).tag(sync=True)
+
     def __init__(
         self,
         xyz: numpy.ndarray,
@@ -493,6 +504,13 @@ class Scatter3dWidget(anywidget.AnyWidget):
 
         # clear tooltip state
         self.tooltip_response_t = {}
+
+    @traitlets.observe("client_ready_t")
+    def _on_client_ready_t(self, change) -> None:
+        # Only ever transition False -> True
+        if bool(change.get("new")) is True and self.interactive_ready_t is not True:
+            self.interactive_ready_t = True
+            self.send_state("interactive_ready_t")
 
     def _set_default_sizes(self):
         max = float(numpy.abs(self.xyz).max())

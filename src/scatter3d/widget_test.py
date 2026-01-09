@@ -8,12 +8,18 @@ app = marimo.App(width="medium")
 def _():
     import random
     from scatter3d import Scatter3dWidget, Category, LabelListErrorResponse
-
     import marimo
     import numpy as np
     import pandas
 
-    num_points = 10000
+
+    import scatter3d
+    print("scatter3d module file:", scatter3d.__file__)
+
+
+
+
+    num_points = 100
 
     point_ids = [f"id_{i}" for i in range(1, num_points + 1)]
     points = np.random.randn(num_points, 3)
@@ -22,6 +28,7 @@ def _():
     species = Category(pandas.Series(species, name="species"))
 
     w = Scatter3dWidget(xyz=points, category=species, point_ids=point_ids)
+
     ui = marimo.ui.anywidget(w)
     ui
     return species, ui, w
@@ -34,6 +41,14 @@ def _(species, ui, w):
     print(species.num_unassigned)
     print(species.values)
     print(w.point_ids)
+    return
+
+
+@app.cell
+def _(w):
+    import inspect
+    print(type(w))
+    print(inspect.getsource(type(w)._on_lasso_request_t))
     return
 
 

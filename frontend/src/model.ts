@@ -12,17 +12,16 @@ export const TRAITS = {
 	labels: "labels_t",
 	colors: "colors_t",
 	missingColor: "missing_color_t",
-
 	lassoRequest: "lasso_request_t",
 	lassoMask: "lasso_mask_t",
 	lassoResult: "lasso_result_t",
-
+	pointSize: "point_size_t",
+	axisLabelSize: "axis_label_size_t",
+	showAxes: "show_axes_t",
 	tooltipRequest: "tooltip_request_t",
 	tooltipResponse: "tooltip_response_t",
-
-	showAxes: "show_axes_t",
-	pointsSize: "point_size_t",
-	axisLabelSize: "axis_label_size_t",
+	interactiveReady: "interactive_ready_t",
+	clientReady: "client_ready_t",
 } as const;
 
 export type TraitKey = typeof TRAITS[keyof typeof TRAITS];

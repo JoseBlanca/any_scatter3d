@@ -9,6 +9,8 @@ export type PointerInfo = {
 	isInside: boolean;
 };
 
+let __scatter3d_ptrLogN = 0;
+
 export function get2dContext(canvas: HTMLCanvasElement) {
 	return canvas.getContext("2d");
 }
