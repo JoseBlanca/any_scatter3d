@@ -18,13 +18,36 @@ def test_xyz_bytes_t_packs_float32_row_major():
 
     w = Scatter3dWidget(xyz=xyz, category=Category(pandas.Series([1, 1])))
 
-    expected = numpy.asarray(xyz, dtype=numpy.float32, order="C").tobytes(order="C")
+    # Contract: the widget packs (x, z, y) so that user z becomes "up" (Y) in Three.js.
+    expected_xyz = numpy.asarray(xyz, dtype=numpy.float32, order="C").copy()
+    expected_xyz[:, [1, 2]] = expected_xyz[:, [2, 1]]
+    expected = expected_xyz.tobytes(order="C")
+
     assert w.xyz_bytes_t == expected
     assert isinstance(w.xyz_bytes_t, (bytes, bytearray))
 
-    # Round-trip decode
+    # Round-trip decode: matches packed order (x, z, y)
     decoded = numpy.frombuffer(w.xyz_bytes_t, dtype=numpy.float32).reshape(-1, 3)
-    numpy.testing.assert_allclose(decoded, xyz.astype(numpy.float32))
+    numpy.testing.assert_allclose(decoded, expected_xyz)
+
+
+def test_xyz_property_round_trips_in_user_order_xyz():
+    xyz = numpy.array(
+        [
+            [1.0, 2.0, 3.0],
+            [4.5, 5.5, 6.5],
+        ],
+        dtype=numpy.float64,
+    )
+
+    w = Scatter3dWidget(xyz=xyz, category=Category(pandas.Series([1, 1])))
+
+    # Public API: w.xyz should return user-space (x, y, z) order,
+    # even though internal storage/packed bytes are (x, z, y).
+    got = w.xyz
+    expected = xyz.astype(numpy.float32)
+
+    numpy.testing.assert_allclose(got, expected)
 
 
 def test_labels_t_and_coded_values_t_are_synced_from_category():
