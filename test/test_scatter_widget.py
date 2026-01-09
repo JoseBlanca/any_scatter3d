@@ -2,6 +2,8 @@ import base64
 
 import numpy
 import pandas
+import pytest
+import traitlets
 
 from scatter3d.scatter3d import Scatter3dWidget, Category
 
@@ -192,3 +194,27 @@ def test_lasso_unknown_label_errors_and_state_unchanged():
     assert w.lasso_result_t["status"] == "error"
     after = decode_u16(w.coded_values_t)
     numpy.testing.assert_array_equal(after, before)
+
+
+def test_entering_lasso_selects_first_label():
+    xyz = numpy.zeros((3, 3), dtype=numpy.float32)
+    cat = Category(pandas.Series(["b", "a", "b"]))  # label_list sorted -> ["a","b"]
+    w = Scatter3dWidget(xyz=xyz, category=cat)
+
+    assert w.interaction_mode_t == "rotate"
+    assert w.active_category_t == ""
+
+    w.interaction_mode_t = "lasso"
+    assert w.active_category_t == "a"
+
+
+def test_cannot_clear_active_category_in_lasso_mode():
+    xyz = numpy.zeros((3, 3), dtype=numpy.float32)
+    cat = Category(pandas.Series(["a", "b", "b"]))
+    w = Scatter3dWidget(xyz=xyz, category=cat)
+
+    w.interaction_mode_t = "lasso"
+    assert w.active_category_t in ("a", "b")
+
+    with pytest.raises(traitlets.TraitError):
+        w.active_category_t = ""

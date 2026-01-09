@@ -571,7 +571,8 @@ class Scatter3dWidget(anywidget.AnyWidget):
 
             # Required deterministic behavior: choose the first category label.
             self.active_category_t = labels[0]
-            self.send_state("active_category_t")
+            if self.interactive_ready_t:
+                self.send_state("active_category_t")
             return
 
         # rotate mode
@@ -585,18 +586,24 @@ class Scatter3dWidget(anywidget.AnyWidget):
 
     @traitlets.observe("interaction_mode_t")
     def _on_interaction_mode_t(self, change) -> None:
-        # If user toggles into lasso, enforce invariants immediately.
-        self._ensure_active_category_invariants()
+        if change.get("new") == "lasso":
+            self._ensure_active_category_invariants()
 
     @traitlets.observe("active_category_t")
     def _on_active_category_t(self, change) -> None:
-        # Prevent clearing in lasso mode (and prevent invalid labels in general).
-        self._ensure_active_category_invariants()
+        if self.interaction_mode_t == "lasso" and change.get("new") == "":
+            # should be impossible due to validator, but keep as belt-and-suspenders
+            self._ensure_active_category_invariants()
 
     @traitlets.observe("labels_t")
     def _on_labels_t(self, change) -> None:
-        # Labels can change if Category label_list changes; ensure active remains valid.
-        self._ensure_active_category_invariants()
+        if self.interaction_mode_t == "lasso":
+            self._ensure_active_category_invariants()
+        elif self.active_category_t and self.active_category_t not in (
+            change.get("new") or []
+        ):
+            # in rotate mode, invalid active is a real error
+            raise RuntimeError(...)
 
     @traitlets.observe("client_ready_t")
     def _on_client_ready_t(self, change) -> None:
@@ -640,6 +647,39 @@ class Scatter3dWidget(anywidget.AnyWidget):
             return None
         # label_list is 0-based, codes are 1..K
         return str(self._category.label_list[code - 1])
+
+    @traitlets.validate("active_category_t")
+    def _validate_active_category_t(self, proposal):
+        v = proposal["value"]
+        if not isinstance(v, str):
+            raise traitlets.TraitError("active_category_t must be a string")
+
+        labels = list(self.labels_t or [])
+        mode = getattr(self, "interaction_mode_t", "rotate")
+
+        if mode == "lasso":
+            if not labels:
+                raise traitlets.TraitError(
+                    "Cannot set active_category_t: labels_t is empty"
+                )
+            if v == "":
+                raise traitlets.TraitError(
+                    "active_category_t cannot be empty in lasso mode"
+                )
+            if v not in labels:
+                raise traitlets.TraitError(
+                    f"active_category_t={v!r} is not present in labels_t"
+                )
+            return v
+
+        # rotate mode
+        if v == "":
+            return v
+        if v not in labels:
+            raise traitlets.TraitError(
+                f"active_category_t={v!r} is not present in labels_t"
+            )
+        return v
 
     @traitlets.observe("tooltip_request_t")
     def _on_tooltip_request(self, change) -> None:
@@ -776,6 +816,8 @@ class Scatter3dWidget(anywidget.AnyWidget):
             raise RuntimeError(
                 "Internal error: colors_t length must match labels_t length"
             )
+
+        self._ensure_active_category_invariants()
 
     def _get_category(self):
         return self._category

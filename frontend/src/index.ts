@@ -158,7 +158,7 @@ export function buildWidget(
 	// base model has widget_manager but no comm; when comm is attached, this should flip.
 	function transportReady(): boolean {
 		// Strict: if Python already confirmed readiness, we’re ready.
-		if (Boolean(dbgModel.get(TRAITS.interactiveReady))) return true;
+		if (dbgModel.get(TRAITS.interactiveReady)) return true;
 
 		// Otherwise: re-send the handshake *now*.
 		// If save_changes returns non-undefined, transport is up and Python will see it.
