@@ -168,21 +168,6 @@ export function buildWidget(
 	const uiCfg = DEFAULT_UI_CONFIG;
 	const bar = createControlBar(toolbar, uiCfg);
 
-	// --- Legend ---
-	const legendHost = document.createElement("div");
-	legendHost.dataset.testid = "legend-host";
-	toolbar.appendChild(legendHost);
-
-	const legendView = createLegendView(legendHost);
-	const legendController = createLegendController({
-		model: dbgModel,
-		view: legendView,
-		transportReady,
-	});
-
-	// Initial render once traits are present
-	legendController.refreshFromModel();
-
 	function showMessage(msg: string) {
 		bar.messageEl.textContent = msg;
 		bar.messageEl.style.display = "";
@@ -195,19 +180,30 @@ export function buildWidget(
 
 	const transport = createTransportReadyController(dbgModel);
 
-	// Keep routing/state consistent when readiness flips.
-	transport.onReadyChange(() => {
-		syncUiFromState();
-	});
-
 	// Best-effort handshake attempt at startup (does nothing harmful if not ready).
 	transport.announceClientReadyOnce();
 
 	function transportReady(): boolean {
-		// Ensure we've attempted to announce at least once before declaring "not ready".
-		transport.announceClientReadyOnce();
-		return transport.isReady();
+	// No TDZ risk: transport is already initialized.
+	transport.announceClientReadyOnce();
+	return transport.isReady();
 	}
+
+	// --- Legend ---
+	const legendHost = document.createElement("div");
+	legendHost.dataset.testid = "legend-host";
+	toolbar.appendChild(legendHost);
+
+	const legendView = createLegendView(legendHost);
+	const legendController = createLegendController({
+	model: dbgModel,
+	view: legendView,
+	transportReady,
+	});
+
+	// Initial render once traits are present
+	legendController.refreshFromModel();
+
 	function syncUiFromState() {
 		const mode =
 			dbgModel.get(TRAITS.interactionMode) === "lasso" ? "lasso" : "rotate";
