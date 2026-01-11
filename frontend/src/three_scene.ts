@@ -8,6 +8,8 @@ import {
 	createPackedMaskBig,
 	setPackedMaskBitBig,
 } from "./binary";
+import { buildColorBuffer } from "./color_mapping";
+import { buildSizeBuffer } from "./size_mapping";
 
 export type ThreeScene = {
 	domElement: HTMLCanvasElement;
@@ -15,6 +17,7 @@ export type ThreeScene = {
 
 	setPointsFromModel: () => void;
 	setColorsFromModel: () => void;
+	setSizesFromModel: () => void;
 
 	// pick nearest point under mouse
 	pickPointIndex: (ndcX: number, ndcY: number) => number | null;
@@ -150,6 +153,10 @@ export function createThreeScene(
 	let colorAttr = new THREE.BufferAttribute(colorArray, 3);
 	geom.setAttribute("color", colorAttr);
 
+	let sizeArray = new Float32Array(nPoints);
+	let sizeAttr = new THREE.BufferAttribute(sizeArray, 1);
+	geom.setAttribute("size", sizeAttr);
+
 	function frameCameraToGeometry() {
 		const bs = geom.boundingSphere;
 		if (!bs || !Number.isFinite(bs.radius) || bs.radius <= 0) return;
@@ -171,10 +178,41 @@ export function createThreeScene(
 		return getPositiveFiniteNumber(model.get(TRAITS.pointSize), 0.05);
 	}
 
-	const mat = new THREE.PointsMaterial({
-		size: getPointSize(),
-		sizeAttenuation: true,
+	const mat = new THREE.ShaderMaterial({
+		transparent: true,
 		vertexColors: true,
+		depthTest: true,
+		depthWrite: true,
+		uniforms: {
+			uPixelRatio: { value: window.devicePixelRatio || 1 },
+		},
+		vertexShader: `
+		attribute float size;
+		attribute vec3 color;
+		varying vec3 vColor;
+
+		void main() {
+			vColor = color;
+
+			vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+
+			// perspective-correct point size
+			gl_PointSize = size * uPixelRatio * (300.0 / -mvPosition.z);
+
+			gl_Position = projectionMatrix * mvPosition;
+		}
+	`,
+		fragmentShader: `
+		varying vec3 vColor;
+
+		void main() {
+			// circular points
+			vec2 c = gl_PointCoord - vec2(0.5);
+			if (dot(c, c) > 0.25) discard;
+
+			gl_FragColor = vec4(vColor, 1.0);
+		}
+	`,
 	});
 
 	const pointsObj = new THREE.Points(geom, mat);
@@ -356,15 +394,16 @@ export function createThreeScene(
 		const arr = positionsFromXYZBytes(model.get(TRAITS.xyzBytes));
 
 		if (positionAttr.array.length !== arr.length) {
-			// size changed: recreate attribute
-			positionAttr = new THREE.BufferAttribute(arr, 3);
-			geom.setAttribute("position", positionAttr);
-
 			// recreate color buffer too
 			nPoints = positionAttr.count;
 			colorArray = new Float32Array(nPoints * 3);
 			colorAttr = new THREE.BufferAttribute(colorArray, 3);
 			geom.setAttribute("color", colorAttr);
+
+			// recreate size buffer too
+			sizeArray = new Float32Array(nPoints);
+			sizeAttr = new THREE.BufferAttribute(sizeArray, 1);
+			geom.setAttribute("size", sizeAttr);
 		} else {
 			(positionAttr.array as Float32Array).set(arr);
 			positionAttr.needsUpdate = true;
@@ -390,34 +429,101 @@ export function createThreeScene(
 		const colors = readRGBList(model.get(TRAITS.colors), "colors_t");
 		const missing = readRGB(model.get(TRAITS.missingColor), "missing_color_t");
 
+		// active_category_t (python authoritative)
+		const activeLabel = model.get(TRAITS.activeCategory);
+		let activeCode: number | null = null;
+
+		if (activeLabel !== null && activeLabel !== undefined) {
+			if (typeof activeLabel !== "string") {
+				throw new Error(
+					`active_category_t must be string|null|undefined, got ${typeof activeLabel}`,
+				);
+			}
+			// Map label -> code via labels_t ordering (code = index + 1)
+			const labelsRaw = model.get(TRAITS.labels);
+			if (!Array.isArray(labelsRaw)) {
+				throw new Error(
+					`labels_t must be an array when active_category_t is set`,
+				);
+			}
+			const labels = labelsRaw.map((v) => String(v));
+			const idx = labels.indexOf(activeLabel);
+			if (idx < 0) {
+				throw new Error(
+					`active_category_t="${activeLabel}" not found in labels_t`,
+				);
+			}
+			activeCode = idx + 1;
+		}
+
+		const computed = buildColorBuffer({
+			codes,
+			palette: colors,
+			missing,
+			activeCode,
+			inactiveDesaturateAmount: activeCode === null ? 0 : 0.75,
+		});
+
 		const cAttr = geom.getAttribute("color") as THREE.BufferAttribute;
 		const cArr = cAttr.array as Float32Array;
 
-		for (let i = 0; i < nPoints; i++) {
-			const code = codes[i] ?? 0;
-			const j = i * 3;
-
-			if (code === 0) {
-				cArr[j] = missing[0];
-				cArr[j + 1] = missing[1];
-				cArr[j + 2] = missing[2];
-				continue;
-			}
-
-			const idx = code - 1;
-			const rgb = colors[idx];
-			if (!rgb) {
-				// Hard fail: codes and colors out of sync is a bug we want to see.
-				throw new Error(
-					`No color for code=${code} (colors_t length=${colors.length}); expected colors_t[${idx}]`,
-				);
-			}
-			cArr[j] = rgb[0];
-			cArr[j + 1] = rgb[1];
-			cArr[j + 2] = rgb[2];
+		if (cArr.length !== computed.length) {
+			throw new Error(
+				`Internal error: color buffer length ${cArr.length} != computed length ${computed.length}`,
+			);
 		}
 
+		cArr.set(computed);
 		cAttr.needsUpdate = true;
+	}
+
+	function setSizesFromModel() {
+		const codes = bytesToUint16ArrayLE(model.get(TRAITS.codedValues));
+
+		nPoints = (geom.getAttribute("position") as THREE.BufferAttribute).count;
+		if (codes.length !== nPoints) {
+			throw new Error(
+				`coded_values_t length ${codes.length} != nPoints ${nPoints}`,
+			);
+		}
+
+		const baseSize = getPointSize();
+
+		// active category → code
+		const activeLabel = model.get(TRAITS.activeCategory);
+		let activeCode: number | null = null;
+
+		if (activeLabel !== null && activeLabel !== undefined) {
+			if (typeof activeLabel !== "string") {
+				throw new Error(`active_category_t must be string|null`);
+			}
+			const labelsRaw = model.get(TRAITS.labels);
+			if (!Array.isArray(labelsRaw)) {
+				throw new Error(`labels_t must be array when active_category_t is set`);
+			}
+			const labels = labelsRaw.map((v) => String(v));
+			const idx = labels.indexOf(activeLabel);
+			if (idx < 0) {
+				throw new Error(
+					`active_category_t="${activeLabel}" not found in labels_t`,
+				);
+			}
+			activeCode = idx + 1;
+		}
+
+		const sizes = buildSizeBuffer({
+			codes,
+			activeCode,
+			baseSize,
+			inactiveScale: activeCode === null ? 1 : 0.35,
+		});
+
+		if (sizes.length !== sizeArray.length) {
+			throw new Error(`Internal error: size buffer length mismatch`);
+		}
+
+		sizeArray.set(sizes);
+		sizeAttr.needsUpdate = true;
 	}
 
 	function setSize(cssW: number, cssH: number, dpr: number) {
@@ -486,6 +592,7 @@ export function createThreeScene(
 		setSize,
 		setPointsFromModel,
 		setColorsFromModel,
+		setSizesFromModel,
 		pickPointIndex,
 		setAxesFromModel,
 		rebuildAxisLabels,

@@ -7,6 +7,7 @@ function makeThreeStub() {
 	return {
 		setPointsFromModel: vi.fn(),
 		setColorsFromModel: vi.fn(),
+		setSizesFromModel: vi.fn(),
 		setAxesFromModel: vi.fn(),
 		rebuildAxisLabels: vi.fn(),
 	} as any;

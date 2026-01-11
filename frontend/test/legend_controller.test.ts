@@ -24,7 +24,7 @@ describe("legend controller", () => {
 		const model = new FakeModel();
 		setupModel(model);
 		model.set(TRAITS.interactionMode, "rotate");
-		model.set(TRAITS.activeCategory, "");
+		model.set(TRAITS.activeCategory, null);
 
 		const view = createLegendView(host);
 		const ctrl = createLegendController({
@@ -54,11 +54,11 @@ describe("legend controller", () => {
 			'[data-testid="legend-item:a"]',
 		) as HTMLElement;
 
-		// click "a" again -> clear to ""
+		// click "a" again -> clear to null
 		a2.click();
 		expect(model.setCalls.at(-1)).toEqual({
 			key: TRAITS.activeCategory,
-			value: "",
+			value: null,
 		});
 
 		ctrl.dispose();
@@ -116,7 +116,7 @@ describe("legend controller", () => {
 		const model = new FakeModel();
 		setupModel(model);
 		model.set(TRAITS.interactionMode, "rotate");
-		model.set(TRAITS.activeCategory, "");
+		model.set(TRAITS.activeCategory, null);
 
 		const view = createLegendView(host);
 		const ctrl = createLegendController({
@@ -151,7 +151,7 @@ describe("legend controller", () => {
 		const model = new FakeModel();
 		setupModel(model);
 		model.set(TRAITS.interactionMode, "rotate");
-		model.set(TRAITS.activeCategory, "");
+		model.set(TRAITS.activeCategory, null);
 
 		const view = createLegendView(host);
 		const ctrl = createLegendController({
@@ -190,7 +190,7 @@ describe("legend controller", () => {
 			[0, 1, 0],
 		]); // missing one
 		model.set(TRAITS.interactionMode, "rotate");
-		model.set(TRAITS.activeCategory, "");
+		model.set(TRAITS.activeCategory, null);
 
 		const view = createLegendView(host);
 		const ctrl = createLegendController({
@@ -200,6 +200,49 @@ describe("legend controller", () => {
 		});
 
 		expect(() => ctrl.refreshFromModel()).toThrow(/Palette incomplete/);
+
+		ctrl.dispose();
+		view.dispose();
+		host.remove();
+	});
+	it("lasso invariant (python-authoritative): when entering lasso with no active category, python sets first label and UI reflects it", () => {
+		const host = document.createElement("div");
+		document.body.appendChild(host);
+
+		const model = new FakeModel();
+		setupModel(model);
+
+		// Start in rotate with no active category
+		model.set(TRAITS.interactionMode, "rotate");
+		model.set(TRAITS.activeCategory, null);
+
+		const view = createLegendView(host);
+		const ctrl = createLegendController({
+			model: model as any,
+			view,
+			transportReady: transportReadyYes,
+		});
+
+		ctrl.refreshFromModel();
+
+		// "Enter lasso mode" (authoritative change comes from python)
+		model.set(TRAITS.interactionMode, "lasso");
+		model.emit(`change:${TRAITS.interactionMode}`);
+
+		// Python must enforce the invariant by selecting first label deterministically.
+		model.set(TRAITS.activeCategory, "a");
+		model.emit(`change:${TRAITS.activeCategory}`);
+
+		// Assert UI reflects authoritative state: "a" active.
+		const a = host.querySelector(
+			'[data-testid="legend-item:a"]',
+		) as HTMLElement;
+		const b = host.querySelector(
+			'[data-testid="legend-item:b"]',
+		) as HTMLElement;
+
+		expect(a.dataset.active).toBe("1");
+		expect(b.dataset.active).toBe("0");
 
 		ctrl.dispose();
 		view.dispose();

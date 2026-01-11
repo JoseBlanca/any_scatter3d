@@ -28,6 +28,7 @@ export function bindModelToView(deps: ModelBindingsDeps): {
 	const onLegendChange = () => {
 		refreshLegendUI();
 		three.setColorsFromModel();
+		three.setSizesFromModel();
 	};
 
 	// Non-legend changes that still affect point colors (coded values)
@@ -71,6 +72,8 @@ export function bindModelToView(deps: ModelBindingsDeps): {
 	model.on(changeEvent(TRAITS.axisLabelSize), onAxisLabelSizeChange);
 	model.on(changeEvent(TRAITS.lassoResult), onLassoResultChange);
 
+	model.on(changeEvent(TRAITS.activeCategory), onLegendChange);
+
 	return {
 		dispose: () => {
 			model.off(changeEvent(TRAITS.tooltipResponse), onTooltipResponseChange);
@@ -82,6 +85,7 @@ export function bindModelToView(deps: ModelBindingsDeps): {
 			model.off(changeEvent(TRAITS.showAxes), onShowAxesChange);
 			model.off(changeEvent(TRAITS.axisLabelSize), onAxisLabelSizeChange);
 			model.off(changeEvent(TRAITS.lassoResult), onLassoResultChange);
+			model.off(changeEvent(TRAITS.activeCategory), onLegendChange);
 		},
 	};
 }

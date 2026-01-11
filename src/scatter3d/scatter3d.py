@@ -473,8 +473,9 @@ class Scatter3dWidget(anywidget.AnyWidget):
 
     # Active category label (string). In lasso mode it must always be non-empty and valid.
     active_category_t = traitlets.Unicode(
-        default_value="",
-        help="Active category label. In lasso mode it must be set to one of labels_t.",
+        default_value=None,
+        allow_none=True,
+        help="Active category label (str) or None. In lasso mode it must be a valid label from labels_t.",
     ).tag(sync=True)
 
     # Legend placement (split into two validated strings; easier to validate than a Dict schema)
@@ -568,7 +569,7 @@ class Scatter3dWidget(anywidget.AnyWidget):
                 # Professional behavior: lasso mode without categories is a hard error.
                 raise RuntimeError("Cannot enter lasso mode: labels_t is empty")
 
-            if self.active_category_t in labels:
+            if self.active_category_t is not None and self.active_category_t in labels:
                 return
 
             # Required deterministic behavior: choose the first category label.
@@ -578,10 +579,9 @@ class Scatter3dWidget(anywidget.AnyWidget):
             return
 
         # rotate mode
-        if self.active_category_t == "":
+        if self.active_category_t is None:
             return
         if self.active_category_t not in labels:
-            # No silent fallback in rotate mode: invalid state must surface.
             raise RuntimeError(
                 f"active_category_t={self.active_category_t!r} is not present in labels_t"
             )
@@ -593,15 +593,15 @@ class Scatter3dWidget(anywidget.AnyWidget):
 
     @traitlets.observe("active_category_t")
     def _on_active_category_t(self, change) -> None:
-        if self.interaction_mode_t == "lasso" and change.get("new") == "":
-            # should be impossible due to validator, but keep as belt-and-suspenders
+        if self.interaction_mode_t == "lasso" and change.get("new") is None:
+            # should be prevented by validator, but keep as belt-and-suspenders
             self._ensure_active_category_invariants()
 
     @traitlets.observe("labels_t")
     def _on_labels_t(self, change) -> None:
         if self.interaction_mode_t == "lasso":
             self._ensure_active_category_invariants()
-        elif self.active_category_t and self.active_category_t not in (
+        elif self.active_category_t is not None and self.active_category_t not in (
             change.get("new") or []
         ):
             # in rotate mode, invalid active is a real error
@@ -660,8 +660,25 @@ class Scatter3dWidget(anywidget.AnyWidget):
     @traitlets.validate("active_category_t")
     def _validate_active_category_t(self, proposal):
         v = proposal["value"]
+
+        if v is None:
+            # allowed only in rotate mode
+            mode = getattr(self, "interaction_mode_t", "rotate")
+            if mode == "lasso":
+                raise traitlets.TraitError(
+                    "active_category_t cannot be None in lasso mode"
+                )
+            return None
+
         if not isinstance(v, str):
-            raise traitlets.TraitError("active_category_t must be a string")
+            raise traitlets.TraitError("active_category_t must be a string or None")
+
+        if v == "":
+            # reject empty string entirely; it was legacy sentinel
+            mode = getattr(self, "interaction_mode_t", "rotate")
+            raise traitlets.TraitError(
+                "active_category_t must be None (rotate) or a valid label string (rotate/lasso); empty string is not allowed"
+            )
 
         labels = list(self.labels_t or [])
         mode = getattr(self, "interaction_mode_t", "rotate")
@@ -671,10 +688,6 @@ class Scatter3dWidget(anywidget.AnyWidget):
                 raise traitlets.TraitError(
                     "Cannot set active_category_t: labels_t is empty"
                 )
-            if v == "":
-                raise traitlets.TraitError(
-                    "active_category_t cannot be empty in lasso mode"
-                )
             if v not in labels:
                 raise traitlets.TraitError(
                     f"active_category_t={v!r} is not present in labels_t"
@@ -682,9 +695,7 @@ class Scatter3dWidget(anywidget.AnyWidget):
             return v
 
         # rotate mode
-        if v == "":
-            return v
-        if v not in labels:
+        if labels and v not in labels:
             raise traitlets.TraitError(
                 f"active_category_t={v!r} is not present in labels_t"
             )

@@ -34,8 +34,8 @@ function readMode(x: unknown): LegendMode {
 	return x === "lasso" ? "lasso" : "rotate";
 }
 
-function readActive(x: unknown): string {
-	return typeof x === "string" ? x : "";
+function readActive(x: unknown): string | null {
+	return typeof x === "string" ? x : null;
 }
 
 export type LegendControllerDeps = {
@@ -72,7 +72,7 @@ export function createLegendController(deps: LegendControllerDeps): {
 			items: labels.map((label, i) => ({
 				label,
 				color: colors[i],
-				isActive: label === active,
+				isActive: active !== null && label === active,
 			})),
 		});
 	}
@@ -92,15 +92,15 @@ export function createLegendController(deps: LegendControllerDeps): {
 
 		if (mode === "lasso") {
 			// In lasso: clicking active is a no-op; cannot clear.
-			if (label === active) return;
+			if (active !== null && label === active) return;
 			model.set(TRAITS.activeCategory, label);
 			model.save_changes();
 			return;
 		}
 
 		// rotate mode
-		if (label === active) {
-			model.set(TRAITS.activeCategory, "");
+		if (active !== null && label === active) {
+			model.set(TRAITS.activeCategory, null);
 		} else {
 			model.set(TRAITS.activeCategory, label);
 		}
