@@ -167,7 +167,11 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 			polygonNdcPoints: polygonNdc.length,
 		});
 
-		model.set(TRAITS.lassoMask, uint8ArrayToBase64(mask));
+		// Send Bytes as DataView so the widget protocol treats it as binary, not JSON.
+		const dv = new DataView(
+			mask.buffer.slice(mask.byteOffset, mask.byteOffset + mask.byteLength),
+		);
+		model.set(TRAITS.lassoMask, dv);
 
 		const req: LassoRequest = {
 			kind: "lasso_commit",

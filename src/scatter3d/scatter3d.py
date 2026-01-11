@@ -434,8 +434,8 @@ class Scatter3dWidget(anywidget.AnyWidget):
     # --- lasso round-trip channels ---
     # Dict message TS -> Python describing a committed lasso operation.
     lasso_request_t = traitlets.Dict(default_value={}).tag(sync=True)
-    # Packed bitmask encoded as base64 string (JSON-friendly).
-    lasso_mask_t = traitlets.Unicode(default_value="").tag(sync=True)
+    # Packed uint8 bitmask (binary).
+    lasso_mask_t = traitlets.Bytes(default_value=b"").tag(sync=True)
     # Dict message Python -> TS acknowledging the last request (ok/error).
     lasso_result_t = traitlets.Dict(default_value={}).tag(sync=True)
 
@@ -863,28 +863,14 @@ class Scatter3dWidget(anywidget.AnyWidget):
         return {lbl: i + 1 for i, lbl in enumerate(self.labels_t)}
 
     def _unpack_mask(self, mask_payload) -> numpy.ndarray:
-        """
-        Returns boolean mask of length N (num_points).
-        Expects packed bits, bitorder='big', length >= ceil(N/8).
-
-        mask_payload may be:
-          - base64 str (from frontend via JSON), or
-          - bytes/bytearray (if a binary channel is used)
-        """
-
         n = self.num_points
         needed = (n + 7) // 8
 
-        if isinstance(mask_payload, str):
-            # tolerate empty string
-            if mask_payload == "":
-                raise ValueError("lasso_mask_t is empty")
-            mask_bytes = base64.b64decode(mask_payload)
-        elif isinstance(mask_payload, (bytes, bytearray)):
+        if isinstance(mask_payload, (bytes, bytearray, memoryview)):
             mask_bytes = bytes(mask_payload)
         else:
             raise ValueError(
-                f"lasso_mask_t must be base64 str or bytes, got {type(mask_payload)}"
+                f"lasso_mask_t must be bytes-like, got {type(mask_payload)}"
             )
 
         if len(mask_bytes) < needed:
