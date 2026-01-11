@@ -12,7 +12,6 @@ import {
 	type InteractionState,
 } from "./interaction";
 import { pointerInfoFromEvent } from "./view";
-import { uint8ArrayToBase64 } from "./binary";
 import { dlog } from "./debug";
 
 export type InteractionControllerDeps = {

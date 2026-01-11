@@ -87,7 +87,7 @@ export type TraitValueMap = {
 	[TRAITS.missingColor]: RGB | null | undefined;
 
 	[TRAITS.lassoRequest]: LassoRequest | null | undefined;
-	[TRAITS.lassoMask]: string | null | undefined; // base64 string when set
+	[TRAITS.lassoMask]: BytesLike;
 	[TRAITS.lassoResult]: LassoResult | null | undefined;
 
 	[TRAITS.pointSize]: number | null | undefined;
@@ -127,6 +127,7 @@ export type WidgetModel = {
 
 	save_changes(): SaveChangesReturn;
 
+	// Backbone-ish events (stringly typed)
 	on(event: string, cb: () => void): void;
 	off(event: string, callback: () => void): void;
 };

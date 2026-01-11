@@ -951,6 +951,10 @@ class Scatter3dWidget(anywidget.AnyWidget):
                 code = m[label_s]
 
             # unpack mask from bytes traitlet
+            if not isinstance(self.lasso_mask_t, (bytes, bytearray, memoryview)):
+                raise RuntimeError(
+                    f"Internal error: lasso_mask_t must be bytes, got {type(self.lasso_mask_t)}"
+                )
             mask = self._unpack_mask(self.lasso_mask_t)
             num_selected = int(numpy.sum(mask))
 

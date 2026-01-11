@@ -160,9 +160,18 @@ describe("interaction_controller: lasso commit emits model request", () => {
 		expect(setKeys).toContain(TRAITS.lassoRequest);
 		expect(model.saveCalls).toBeGreaterThan(0);
 
-		// Mask is base64 for [255]
+		// Mask is binary bytes (DataView) for [255]
 		const maskSet = model.setCalls.find((c) => c.key === TRAITS.lassoMask);
-		expect(maskSet?.value).toBe("/w==");
+		expect(maskSet).toBeTruthy();
+
+		const v = maskSet!.value;
+
+		// In jsdom/vitest the widget stack isn't involved; we set DataView directly.
+		expect(v).toBeInstanceOf(DataView);
+
+		const dv = v as DataView;
+		expect(dv.byteLength).toBe(1);
+		expect(dv.getUint8(0)).toBe(255);
 
 		// Request payload is strict and correct
 		const reqSet = model.setCalls.find((c) => c.key === TRAITS.lassoRequest);
