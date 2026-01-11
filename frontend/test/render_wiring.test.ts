@@ -67,6 +67,14 @@ describe("buildWidget wiring", () => {
 
 		const model = new FakeModel();
 
+		// Minimal trait state required for legend/controller startup
+		model.set("labels_t", []);
+		model.set("colors_t", []);
+		model.set("active_category_t", "");
+		model.set("interaction_mode_t", "rotate");
+		model.set("legend_side_t", "right");
+		model.set("legend_dock_t", "top");
+
 		// spy on addEventListener calls on canvas elements
 		const addSpy = vi.spyOn(HTMLCanvasElement.prototype, "addEventListener");
 
@@ -93,12 +101,12 @@ describe("buildWidget wiring", () => {
 		expect(types).toContain("pointermove");
 		expect(types).toContain("pointerup");
 
-		// Model observers: at least your explicit tooltip_response observer
-		// (More will show up as you stop mocking controllers and let them register)
-		expect(h.debug.modelChangeHandlers.length).toBeGreaterThanOrEqual(0);
+		// At minimum, buildWidget should subscribe to interactive_ready_t via transport controller.
+		expect(h.debug.modelChangeHandlers).toContain("interactive_ready_t");
 
 		// Cleanup should remove overlay canvas
 		h.cleanup();
+		addSpy.mockRestore();
 		expect(document.body.contains(h.overlayCanvas)).toBe(false);
 	});
 });

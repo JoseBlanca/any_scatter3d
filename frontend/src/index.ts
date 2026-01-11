@@ -1,8 +1,7 @@
-// index.ts
 import type { WidgetModel } from "./model";
 import { TRAITS } from "./model";
 import { createWidgetRoot, createOverlayCanvas, get2dContext } from "./view";
-import { createInteractionState, drawOverlay } from "./interaction";
+import { createInteractionState, drawOverlay, setMode } from "./interaction";
 import { DEFAULT_UI_CONFIG } from "./ui_config";
 import { createControlBar, renderControlBar } from "./ui";
 import { createThreeScene } from "./three_scene";
@@ -11,10 +10,12 @@ import { createTooltipController } from "./tooltip_controller";
 import { createInteractionController } from "./interaction_controller";
 import { createResizeController } from "./resize_controller";
 import { createRafController } from "./raf_controller";
-import { createLabelsController } from "./labels_controller";
 import { createTooltipView } from "./tooltip_view";
+import { createLegendView } from "./legend_view";
+import { createLegendController } from "./legend_controller";
 import { makeDebugModel } from "./model_debug";
-import { dlog } from "./debug";
+import type { ResizeCanvasFn } from "./resize_controller";
+import { createTransportReadyController } from "./transport_ready";
 
 export type WidgetHandles = {
 	cleanup: () => void;
@@ -29,6 +30,7 @@ export type WidgetHandles = {
 		modelChangeHandlers: string[];
 		hostRect: { width: number; height: number };
 		overlaySize: { width: number; height: number };
+		stateSize: { dpr: number; pixelWidth: number; pixelHeight: number };
 	};
 };
 
@@ -53,6 +55,15 @@ function bindAndRecordPointer(
 	return () => target.removeEventListener(type, handler as any, options as any);
 }
 
+function isPromiseLike(x: unknown): x is PromiseLike<unknown> {
+	return (
+		typeof x === "object" &&
+		x !== null &&
+		"then" in x &&
+		typeof (x as any).then === "function"
+	);
+}
+
 export function buildWidget(
 	model: WidgetModel,
 	el: HTMLElement,
@@ -63,6 +74,7 @@ export function buildWidget(
 		modelChangeHandlers: [],
 		hostRect: { width: 0, height: 0 },
 		overlaySize: { width: 0, height: 0 },
+		stateSize: { dpr: 0, pixelWidth: 0, pixelHeight: 0 },
 	};
 
 	// Use debug-wrapped model everywhere so we record registrations inside controllers/bindings.
@@ -79,6 +91,17 @@ export function buildWidget(
 	// --- 2D overlay canvas (lasso) ---
 	const { canvas: overlayCanvas, resizeCanvas } =
 		createOverlayCanvas(canvasHost);
+
+	const resizeCanvasWithDebug: ResizeCanvasFn = (cssW, cssH) => {
+		const ret = resizeCanvas(cssW, cssH);
+		debug.stateSize = {
+			dpr: ret.devicePixelRatio,
+			pixelWidth: ret.width,
+			pixelHeight: ret.height,
+		};
+		return ret;
+	};
+
 	const ctx = get2dContext(overlayCanvas);
 
 	const state = createInteractionState();
@@ -145,6 +168,21 @@ export function buildWidget(
 	const uiCfg = DEFAULT_UI_CONFIG;
 	const bar = createControlBar(toolbar, uiCfg);
 
+	// --- Legend ---
+	const legendHost = document.createElement("div");
+	legendHost.dataset.testid = "legend-host";
+	toolbar.appendChild(legendHost);
+
+	const legendView = createLegendView(legendHost);
+	const legendController = createLegendController({
+		model: dbgModel,
+		view: legendView,
+		transportReady,
+	});
+
+	// Initial render once traits are present
+	legendController.refreshFromModel();
+
 	function showMessage(msg: string) {
 		bar.messageEl.textContent = msg;
 		bar.messageEl.style.display = "";
@@ -155,33 +193,37 @@ export function buildWidget(
 		bar.messageEl.style.display = "none";
 	}
 
-	// Conservative readiness check: in the failing marimo state we observed,
-	// base model has widget_manager but no comm; when comm is attached, this should flip.
-	function transportReady(): boolean {
-		// Strict: if Python already confirmed readiness, we’re ready.
-		if (dbgModel.get(TRAITS.interactiveReady)) return true;
+	const transport = createTransportReadyController(dbgModel);
 
-		// Otherwise: re-send the handshake *now*.
-		// If save_changes returns non-undefined, transport is up and Python will see it.
-		dbgModel.set(TRAITS.clientReady, true);
-		try {
-			const ret: any = dbgModel.save_changes();
-			return ret !== undefined;
-		} catch {
-			// Never crash render; readiness stays false.
-			return false;
-		}
-	}
-
-	const labelsController = createLabelsController({
-		model: dbgModel,
-		select: bar.labelSelect,
+	// Keep routing/state consistent when readiness flips.
+	transport.onReadyChange(() => {
+		syncUiFromState();
 	});
 
+	// Best-effort handshake attempt at startup (does nothing harmful if not ready).
+	transport.announceClientReadyOnce();
+
+	function transportReady(): boolean {
+		// Ensure we've attempted to announce at least once before declaring "not ready".
+		transport.announceClientReadyOnce();
+		return transport.isReady();
+	}
 	function syncUiFromState() {
+		const mode =
+			dbgModel.get(TRAITS.interactionMode) === "lasso" ? "lasso" : "rotate";
+
+		// Keep local state in sync (operation remains frontend-only)
+		if (mode === "rotate") {
+			setMode(state, { kind: "rotate" });
+		} else {
+			// preserve current operation if already lasso, default to add
+			const op = state.mode.kind === "lasso" ? state.mode.operation : "add";
+			setMode(state, { kind: "lasso", operation: op });
+		}
+
 		const uiState = {
-			mode: state.mode.kind,
-			operation: state.mode.kind === "lasso" ? state.mode.operation : "add",
+			mode,
+			operation: mode === "lasso" ? state.mode.operation : "add",
 		} as const;
 
 		renderControlBar(bar, uiCfg, uiState);
@@ -214,6 +256,9 @@ export function buildWidget(
 		transportReady,
 		showMessage,
 		clearMessage,
+
+		// Debug hooks: must never crash production.
+		debug: (globalThis as any).__scatter3d_test_debug ?? undefined,
 	});
 
 	const tooltipController = createTooltipController({
@@ -228,7 +273,7 @@ export function buildWidget(
 	const modelBindings = bindModelToView({
 		model: dbgModel,
 		three,
-		refreshLabelsUI: labelsController.refresh,
+		refreshLegendUI: legendController.refreshFromModel,
 		onTooltipResponseChange: tooltipController.onTooltipResponseChange,
 	});
 
@@ -244,18 +289,21 @@ export function buildWidget(
 	three.setColorsFromModel();
 	three.setAxesFromModel();
 
-	// Initial labels
-	labelsController.refresh();
-
 	// Resize
 	const resizeController = createResizeController({
 		canvasHost,
 		three,
 		state,
-		resizeCanvas,
+		resizeCanvas: resizeCanvasWithDebug,
 	});
+
 	const forceResize = () => {
 		resizeController.applyNow();
+		debug.stateSize = {
+			dpr: state.dpr,
+			pixelWidth: state.pixelWidth,
+			pixelHeight: state.pixelHeight,
+		};
 		syncUiFromState(); // ensure pointer routing matches mode after size changes
 	};
 
@@ -284,6 +332,11 @@ export function buildWidget(
 				debug.overlaySize = {
 					width: overlayCanvas.width,
 					height: overlayCanvas.height,
+				};
+				debug.stateSize = {
+					dpr: state.dpr,
+					pixelWidth: state.pixelWidth,
+					pixelHeight: state.pixelHeight,
 				};
 
 				return;
@@ -332,12 +385,15 @@ export function buildWidget(
 		abortController.abort();
 
 		// Dispose in roughly reverse creation order
-		labelsController.dispose();
+		legendController.dispose();
+		legendView.dispose();
+		legendHost.remove();
 		modelBindings.dispose();
 		interactionController.dispose();
 		tooltipController.dispose();
 		resizeController.dispose();
 		three.dispose();
+		transport.dispose();
 
 		// Remove overlay canvas from DOM
 		overlayCanvas.remove();

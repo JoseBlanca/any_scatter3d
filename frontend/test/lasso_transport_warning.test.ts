@@ -1,88 +1,92 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { buildWidget } from "../src/index";
-import type { WidgetModel } from "../src/model";
+// test/lasso_transport_warning.test.ts
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { FakeModel } from "./fake_model";
+import { createInteractionState } from "../src/interaction";
+import { createInteractionController } from "../src/interaction_controller";
+import { TRAITS } from "../src/model";
 
-vi.mock("../src/three_scene", () => ({
-	createThreeScene: () => {
-		const domElement = document.createElement("canvas");
-		return {
-			domElement,
-			setPointsFromModel: vi.fn(),
-			setColorsFromModel: vi.fn(),
-			setAxesFromModel: vi.fn(),
-			render: vi.fn(),
-			dispose: vi.fn(),
-			selectMaskInLasso: vi.fn(() => new Uint8Array([255])),
-			setSize: vi.fn(),
-		};
-	},
-}));
-
-vi.mock("../src/raf_controller", () => ({
-	createRafController: () => ({ start: vi.fn(), stop: vi.fn() }),
-}));
-
-vi.mock("../src/model_bindings", () => ({
-	bindModelToView: () => ({ dispose: vi.fn() }),
-}));
-
-vi.mock("../src/tooltip_controller", () => ({
-	createTooltipController: () => ({
-		dispose: vi.fn(),
-		onTooltipResponseChange: vi.fn(),
-	}),
-}));
-
-vi.mock("../src/labels_controller", () => ({
-	createLabelsController: () => ({ refresh: vi.fn(), dispose: vi.fn() }),
-}));
-
-function makeNonInteractiveModel(): WidgetModel {
+function makeBar() {
 	return {
-		get: () => undefined,
-		set: () => {},
-		save_changes: () => undefined,
-		on: () => {},
-		off: () => {},
+		rotateBtn: document.createElement("button"),
+		lassoBtn: document.createElement("button"),
+		addBtn: document.createElement("button"),
+		removeBtn: document.createElement("button"),
 	} as any;
 }
 
-describe("lasso transport warning UX", () => {
+describe("interaction_controller: lasso transport warning", () => {
 	beforeEach(() => {
 		document.body.innerHTML = "";
 	});
 
-	it("clicking Lasso when transport is not ready shows warning and stays in rotate mode", () => {
-		const el = document.createElement("div");
-		document.body.appendChild(el);
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
 
-		// This is the key: no comm/transport fields on widget_manager.
-		const model = makeNonInteractiveModel() as any;
-		model.widget_manager = {}; // matches what we observed on marimo initial load
+	it("clicking Lasso when transport is not ready shows warning and does not set interaction_mode_t", () => {
+		// DOM
+		const root = document.createElement("div");
+		const canvas = document.createElement("canvas");
+		root.appendChild(canvas);
+		document.body.appendChild(root);
 
-		const h = buildWidget(model, el, { startRaf: false });
+		// Model: starts in rotate
+		const model = new FakeModel();
+		model.set(TRAITS.interactionMode, "rotate");
+		model.set(TRAITS.activeCategory, "");
 
-		const lassoBtn = h.root.querySelector(
-			'[data-testid="mode-lasso"]',
-		) as HTMLButtonElement;
-		expect(lassoBtn).toBeTruthy();
+		// State (size irrelevant for this test, but keep invariants sane)
+		const state = createInteractionState();
+		state.dpr = 1;
+		state.pixelWidth = 400;
+		state.pixelHeight = 300;
 
-		// Initial is rotate mode: overlay should not receive pointer events
-		expect(getComputedStyle(h.overlayCanvas).pointerEvents).toBe("none");
+		// Minimal deps
+		const bar = makeBar();
+		const syncUiFromState = vi.fn();
 
-		// Click lasso: should NOT enter lasso mode; should show warning
-		lassoBtn.click();
+		const showMessage = vi.fn();
+		const clearMessage = vi.fn();
 
-		const msgEl = h.root.querySelector(
-			'[data-testid="ui-message"]',
-		) as HTMLElement;
-		expect(msgEl).toBeTruthy();
-		expect(msgEl.textContent ?? "").toMatch(/not interactive/i);
-		expect(getComputedStyle(msgEl).display).not.toBe("none");
+		createInteractionController({
+			model: model as any,
+			three: { selectMaskInLasso: vi.fn() } as any,
+			bar,
+			state,
+			root,
+			canvas,
+			syncUiFromState,
+			signal: new AbortController().signal,
+			transportReady: () => false,
+			showMessage,
+			clearMessage,
+		});
 
-		// Still rotate routing
-		expect(getComputedStyle(h.overlayCanvas).pointerEvents).toBe("none");
+		// Act: user clicks lasso
+		bar.lassoBtn.click();
 
-		h.cleanup();
+		// Assert: warning shown
+		expect(showMessage).toHaveBeenCalledTimes(1);
+		expect(String(showMessage.mock.calls[0][0])).toMatch(/not interactive/i);
+
+		const prevSetCalls = model.setCalls.length;
+		const prevSaveCalls = model.saveCalls;
+
+		// Assert: warning shown
+		expect(showMessage).toHaveBeenCalledTimes(1);
+		expect(String(showMessage.mock.calls[0][0])).toMatch(/not interactive/i);
+
+		// Assert: no additional trait write for interaction mode caused by the click
+		const newCalls = model.setCalls.slice(prevSetCalls);
+		expect(newCalls.some((c) => c.key === TRAITS.interactionMode)).toBe(false);
+
+		// And no save_changes caused by the click
+		expect(model.saveCalls).toBe(prevSaveCalls);
+
+		// clearMessage should not be called because we early-return before it
+		expect(clearMessage).not.toHaveBeenCalled();
+
+		// clearMessage should not be called because we early-return before it
+		expect(clearMessage).not.toHaveBeenCalled();
 	});
 });

@@ -1,5 +1,3 @@
-// model.ts
-
 // 1) Protocol / model interface =================================================
 
 export const TRAITS = {
@@ -22,6 +20,12 @@ export const TRAITS = {
 
 	interactiveReady: "interactive_ready_t",
 	clientReady: "client_ready_t",
+
+	// Legend + mode (Python is authoritative)
+	interactionMode: "interaction_mode_t",
+	activeCategory: "active_category_t",
+	legendSide: "legend_side_t",
+	legendDock: "legend_dock_t",
 } as const;
 
 export type TraitKey = typeof TRAITS[keyof typeof TRAITS];
@@ -32,22 +36,26 @@ export type RGB = [number, number, number];
 
 export type LassoOp = "add" | "remove";
 
+/**
+ * Frontend -> Python lasso request.
+ * Make this strict: if we send it, we must send complete data.
+ */
 export type LassoRequest = {
 	kind: "lasso_commit";
 	op: LassoOp;
-	label?: string;
-	request_id?: number;
+	label: string;
+	request_id: number;
 };
 
 export type LassoResult =
 	| {
-			request_id?: number;
+			request_id: number;
 			status: "ok";
 			num_selected?: number;
 			num_changed?: number;
 	  }
 	| {
-			request_id?: number;
+			request_id: number;
 			status: "error";
 			message: string;
 	  };
@@ -55,8 +63,8 @@ export type LassoResult =
 export type TooltipRequest = { kind: "tooltip"; i: number; request_id: number };
 
 export type TooltipResponse =
-	| { request_id?: number; status: "ok"; data: Record<string, unknown> }
-	| { request_id?: number; status: "error"; message: string };
+	| { request_id: number; status: "ok"; data: Record<string, unknown> }
+	| { request_id: number; status: "error"; message: string };
 
 // 3) Trait value typing (the important bit) =====================================
 //
@@ -79,7 +87,7 @@ export type TraitValueMap = {
 	[TRAITS.missingColor]: RGB | null | undefined;
 
 	[TRAITS.lassoRequest]: LassoRequest | null | undefined;
-	[TRAITS.lassoMask]: string; // <-- base64 string
+	[TRAITS.lassoMask]: string | null | undefined; // base64 string when set
 	[TRAITS.lassoResult]: LassoResult | null | undefined;
 
 	[TRAITS.pointSize]: number | null | undefined;
@@ -92,17 +100,32 @@ export type TraitValueMap = {
 	// Handshake flags
 	[TRAITS.interactiveReady]: boolean | null | undefined;
 	[TRAITS.clientReady]: boolean | null | undefined;
+
+	// Mode + legend
+	[TRAITS.interactionMode]: "rotate" | "lasso" | null | undefined;
+	[TRAITS.activeCategory]: string | null | undefined;
+
+	[TRAITS.legendSide]: "left" | "right" | null | undefined;
+	[TRAITS.legendDock]: "top" | "bottom" | null | undefined;
 };
 
 // 4) Typed model interface ======================================================
 //
 // This keeps Backbone-ish 'on/off' because the widget model uses string events,
 // but strongly types get/set by trait key.
+//
+// IMPORTANT:
+// save_changes() return type must not be `void` because some code uses it to
+// detect whether the comm/transport is available. Different widget stacks may
+// return undefined, a Promise, or something else.
+
+export type SaveChangesReturn = unknown;
 
 export type WidgetModel = {
 	get<K extends keyof TraitValueMap>(key: K): TraitValueMap[K];
 	set<K extends keyof TraitValueMap>(key: K, value: TraitValueMap[K]): void;
-	save_changes(): void;
+
+	save_changes(): SaveChangesReturn;
 
 	on(event: string, cb: () => void): void;
 	off(event: string, callback: () => void): void;
@@ -114,20 +137,18 @@ export function changeEvent<K extends TraitKey>(trait: K): `change:${K}` {
 	return `change:${trait}`;
 }
 
-export function getBoolean(
+export function getBoolean<K extends keyof TraitValueMap>(
 	model: WidgetModel,
-	key: keyof TraitValueMap,
+	key: K,
 ): boolean {
-	const v = model.get(key as any);
-	// Accept only literal true; everything else -> false
-	return v === true;
+	return model.get(key) === true;
 }
 
-export function getNumber(
+export function getNumber<K extends keyof TraitValueMap>(
 	model: WidgetModel,
-	key: keyof TraitValueMap,
+	key: K,
 	fallback: number,
 ): number {
-	const v = model.get(key as any);
+	const v = model.get(key);
 	return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }

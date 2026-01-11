@@ -1,7 +1,7 @@
-import type { WidgetModel, LassoRequest } from "./model";
+import type { WidgetModel, LassoRequest, LassoOp } from "./model";
 import { TRAITS } from "./model";
-import type { createThreeScene } from "./three_scene";
-import type { createControlBar } from "./ui";
+import type { ThreeScene } from "./three_scene";
+import type { ControlBar } from "./ui";
 import {
 	setMode,
 	onPointerDown,
@@ -17,8 +17,8 @@ import { dlog } from "./debug";
 
 export type InteractionControllerDeps = {
 	model: WidgetModel;
-	three: ReturnType<typeof createThreeScene>;
-	bar: ReturnType<typeof createControlBar>;
+	three: ThreeScene;
+	bar: ControlBar;
 	state: InteractionState;
 
 	root: HTMLElement;
@@ -31,12 +31,11 @@ export type InteractionControllerDeps = {
 	showMessage: (msg: string) => void;
 	clearMessage: () => void;
 
-	// Debug hooks for deterministic tests + real-world diagnosis
 	debug?: {
 		onCommitLasso?: (polyNdc: Array<{ x: number; y: number }>) => void;
 		onIgnoreLasso?: (reason: string) => void;
 		onSendLasso?: (payload: {
-			op: "add" | "remove";
+			op: LassoOp;
 			label: string;
 			request_id: number;
 			maskBytes: number;
@@ -44,6 +43,15 @@ export type InteractionControllerDeps = {
 		}) => void;
 	};
 };
+
+function isPromiseLike(x: unknown): x is PromiseLike<unknown> {
+	return (
+		typeof x === "object" &&
+		x !== null &&
+		"then" in x &&
+		typeof (x as any).then === "function"
+	);
+}
 
 export function createInteractionController(deps: InteractionControllerDeps): {
 	dispose: () => void;
@@ -71,8 +79,8 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 	bar.rotateBtn.addEventListener(
 		"click",
 		() => {
-			setMode(state, { kind: "rotate" });
-			syncUiFromState();
+			model.set(TRAITS.interactionMode, "rotate");
+			model.save_changes();
 		},
 		{ signal },
 	);
@@ -80,7 +88,6 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 	bar.lassoBtn.addEventListener(
 		"click",
 		() => {
-			// If comm/transport is not ready, do not enter lasso mode.
 			if (!transportReady()) {
 				showMessage(
 					"Widget not interactive yet. Maybe you should run the cell to enable lasso.",
@@ -89,6 +96,12 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 			}
 
 			clearMessage();
+
+			// Keep Python authoritative: set the trait.
+			model.set(TRAITS.interactionMode, "lasso");
+			model.save_changes();
+
+			// Local state follows the model (op remains frontend-only)
 			setMode(state, { kind: "lasso", operation: "add" });
 			syncUiFromState();
 			root.focus();
@@ -129,16 +142,16 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 			return;
 		}
 
-		const label = bar.labelSelect.value;
-		if (!label) {
-			ignore("no-label-selected");
-			return;
+		const label = model.get(TRAITS.activeCategory);
+		if (typeof label !== "string" || label.length === 0) {
+			throw new Error(
+				"Invariant violation: lasso commit with empty active_category_t",
+			);
 		}
 
 		const op = state.mode.operation;
 		const requestId = requestCounter++;
 
-		// If selection is empty, there is nothing to send.
 		const mask = three.selectMaskInLasso(polygonNdc);
 		if (mask.length === 0) {
 			ignore("empty-mask");
@@ -155,6 +168,7 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 		});
 
 		model.set(TRAITS.lassoMask, uint8ArrayToBase64(mask));
+
 		const req: LassoRequest = {
 			kind: "lasso_commit",
 			op,
@@ -163,9 +177,9 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 		};
 		model.set(TRAITS.lassoRequest, req);
 
-		let ret: any;
+		let ret: unknown;
 		try {
-			ret = model.save_changes() as any;
+			ret = model.save_changes();
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
 			if (msg.includes("widget transport not ready")) {
@@ -175,10 +189,10 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 				ignore("transport-not-ready");
 				return;
 			}
-			throw e; // unknown errors must remain loud
+			throw e;
 		}
 
-		if (ret && typeof ret.then === "function") {
+		if (isPromiseLike(ret)) {
 			ret.then(
 				() => dlog("lasso", "[save_changes] ok", { request_id: requestId }),
 				(err: unknown) =>
@@ -199,20 +213,18 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 	canvas.addEventListener(
 		"pointerdown",
 		(e) => {
-			// 1) Hard guard: if layout isn't ready, ignore.
-			// This is the real-world Marimo failure mode.
+			// This guard only works if you initialize the state to 0s
+			// (we'll fix that in interaction.ts next).
 			if (state.pixelWidth <= 0 || state.pixelHeight <= 0 || state.dpr <= 0) {
 				ignore("not-ready-size");
 				return;
 			}
 
-			// 2) Only lasso mode handles pointerdown on overlay.
 			if (state.mode.kind !== "lasso") {
 				ignore("pointerdown-not-lasso");
 				return;
 			}
 
-			// 3) Now it's safe to do rect-based computations.
 			const p = pointerInfoFromEvent(e, canvas);
 			if (!p.isInside) {
 				ignore("pointerdown-outside");
@@ -224,7 +236,6 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 			try {
 				canvas.setPointerCapture(e.pointerId);
 			} catch {
-				// not fatal; don't spam ignore reasons in production if you want
 				ignore("setPointerCapture-failed");
 			}
 
@@ -239,8 +250,6 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 		(e) => {
 			const p = pointerInfoFromEvent(e, canvas);
 
-			// Optional: if you want strict mode, only track move in lasso mode.
-			// But for now, keep behavior and just record why it might be ignored.
 			if (state.mode.kind !== "lasso") {
 				ignore("pointermove-not-lasso");
 				return;
@@ -282,7 +291,10 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 				cancelLasso(state);
 				syncUiFromState();
 				e.preventDefault();
-			} else if (e.key === "Enter") {
+				return;
+			}
+
+			if (e.key === "Enter") {
 				if (state.mode.kind !== "lasso") {
 					ignore("enter-not-lasso");
 					return;

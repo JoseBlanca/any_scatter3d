@@ -1,4 +1,10 @@
-import type { PointerInfo } from "./view";
+export type PointerInfo = {
+	cssX: number;
+	cssY: number;
+	normDevCoordX: number; // -1..1
+	normDevCoordY: number; // -1..1
+	isInside: boolean;
+};
 
 const MIN_LASSO_DIST_BETWEEN_POINTS = 2;
 
@@ -40,9 +46,9 @@ export function createInteractionState(): InteractionState {
 		mode: { kind: "rotate" },
 		lasso: { kind: "idle" },
 		lastPointer: null,
-		dpr: 1,
-		pixelWidth: 1,
-		pixelHeight: 1,
+		dpr: 0,
+		pixelWidth: 0,
+		pixelHeight: 0,
 	};
 }
 

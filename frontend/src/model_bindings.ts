@@ -1,5 +1,5 @@
 import type { WidgetModel } from "./model";
-import { TRAITS } from "./model";
+import { TRAITS, changeEvent } from "./model";
 import type { ThreeScene } from "./three_scene";
 
 export type ModelBindingsDeps = {
@@ -41,48 +41,47 @@ export function bindModelToView(deps: ModelBindingsDeps): {
 		if (res.status === "error") console.error("Lasso error:", res.message);
 	};
 
+	function axesVisible(): boolean {
+		return model.get(TRAITS.showAxes) === true;
+	}
+
 	const onShowAxesChange = () => {
 		three.setAxesFromModel();
-		if (model.get(TRAITS.showAxes) === true) three.rebuildAxisLabels?.();
+		if (axesVisible()) three.rebuildAxisLabels?.();
 	};
 
 	const onAxisLabelSizeChange = () => {
-		if (model.get(TRAITS.showAxes) !== true) return;
+		if (!axesVisible()) return;
 		three.rebuildAxisLabels?.();
 	};
 
 	// Wire events
-	model.on(`change:${TRAITS.tooltipResponse}`, onTooltipResponseChange);
-
-	model.on(`change:${TRAITS.xyzBytes}`, onXYZChange);
+	model.on(changeEvent(TRAITS.tooltipResponse), onTooltipResponseChange);
+	model.on(changeEvent(TRAITS.xyzBytes), onXYZChange);
 
 	// Colors depend on codedValues but legend does not
-	model.on(`change:${TRAITS.codedValues}`, onCodedValuesChange);
+	model.on(changeEvent(TRAITS.codedValues), onCodedValuesChange);
 
 	// Legend-related traits (also recolor points for robustness)
-	model.on(`change:${TRAITS.labels}`, onLegendChange);
-	model.on(`change:${TRAITS.colors}`, onLegendChange);
-	model.on(`change:${TRAITS.missingColor}`, onLegendChange);
+	model.on(changeEvent(TRAITS.labels), onLegendChange);
+	model.on(changeEvent(TRAITS.colors), onLegendChange);
+	model.on(changeEvent(TRAITS.missingColor), onLegendChange);
 
-	model.on(`change:${TRAITS.showAxes}`, onShowAxesChange);
-	model.on(`change:${TRAITS.axisLabelSize}`, onAxisLabelSizeChange);
-	model.on(`change:${TRAITS.lassoResult}`, onLassoResultChange);
+	model.on(changeEvent(TRAITS.showAxes), onShowAxesChange);
+	model.on(changeEvent(TRAITS.axisLabelSize), onAxisLabelSizeChange);
+	model.on(changeEvent(TRAITS.lassoResult), onLassoResultChange);
 
 	return {
 		dispose: () => {
-			model.off(`change:${TRAITS.tooltipResponse}`, onTooltipResponseChange);
-
-			model.off(`change:${TRAITS.xyzBytes}`, onXYZChange);
-
-			model.off(`change:${TRAITS.codedValues}`, onCodedValuesChange);
-
-			model.off(`change:${TRAITS.labels}`, onLegendChange);
-			model.off(`change:${TRAITS.colors}`, onLegendChange);
-			model.off(`change:${TRAITS.missingColor}`, onLegendChange);
-
-			model.off(`change:${TRAITS.showAxes}`, onShowAxesChange);
-			model.off(`change:${TRAITS.axisLabelSize}`, onAxisLabelSizeChange);
-			model.off(`change:${TRAITS.lassoResult}`, onLassoResultChange);
+			model.off(changeEvent(TRAITS.tooltipResponse), onTooltipResponseChange);
+			model.off(changeEvent(TRAITS.xyzBytes), onXYZChange);
+			model.off(changeEvent(TRAITS.codedValues), onCodedValuesChange);
+			model.off(changeEvent(TRAITS.labels), onLegendChange);
+			model.off(changeEvent(TRAITS.colors), onLegendChange);
+			model.off(changeEvent(TRAITS.missingColor), onLegendChange);
+			model.off(changeEvent(TRAITS.showAxes), onShowAxesChange);
+			model.off(changeEvent(TRAITS.axisLabelSize), onAxisLabelSizeChange);
+			model.off(changeEvent(TRAITS.lassoResult), onLassoResultChange);
 		},
 	};
 }

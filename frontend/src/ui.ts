@@ -6,7 +6,6 @@ export type ControlBar = {
 	lassoBtn: HTMLButtonElement;
 	addBtn: HTMLButtonElement;
 	removeBtn: HTMLButtonElement;
-	labelSelect: HTMLSelectElement;
 	messageEl: HTMLSpanElement;
 };
 
@@ -30,9 +29,6 @@ export function createControlBar(
 	const removeBtn = document.createElement("button");
 	removeBtn.textContent = "Remove";
 
-	const labelSelect = document.createElement("select");
-	labelSelect.dataset.testid = "label-select";
-
 	const messageEl = document.createElement("span");
 	messageEl.dataset.testid = "ui-message";
 	messageEl.style.marginLeft = `${cfg.messages.marginLeftPx}px`;
@@ -52,7 +48,6 @@ export function createControlBar(
 	toolbar.appendChild(lassoBtn);
 	toolbar.appendChild(addBtn);
 	toolbar.appendChild(removeBtn);
-	toolbar.appendChild(labelSelect);
 	toolbar.appendChild(messageEl);
 
 	return {
@@ -61,7 +56,6 @@ export function createControlBar(
 		lassoBtn,
 		addBtn,
 		removeBtn,
-		labelSelect,
 		messageEl,
 	};
 }
@@ -97,7 +91,6 @@ export function renderControlBar(bar: ControlBar, cfg: UiConfig, s: UiState) {
 	// show/hide lasso-only controls
 	bar.addBtn.style.display = inLasso ? "" : "none";
 	bar.removeBtn.style.display = inLasso ? "" : "none";
-	bar.labelSelect.style.display = inLasso ? "" : "none";
 
 	// active/inactive styles
 	styleBtn(bar.rotateBtn, cfg, s.mode === "rotate");

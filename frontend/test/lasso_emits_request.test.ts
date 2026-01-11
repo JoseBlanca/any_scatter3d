@@ -1,47 +1,11 @@
-// frontend/test/lasso_emits_request.test.ts
-import { describe, it, expect, vi, beforeEach } from "vitest";
+// test/lasso_emits_request.test.ts
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { FakeModel } from "./fake_model";
+import { createInteractionState } from "../src/interaction";
+import { createInteractionController } from "../src/interaction_controller";
+import { TRAITS, type LassoRequest } from "../src/model";
 
-// Keep these mocks (avoid WebGL/RAF complexity)
-vi.mock("../src/three_scene", () => ({
-	createThreeScene: () => {
-		const domElement = document.createElement("canvas");
-		return {
-			domElement,
-			setPointsFromModel: vi.fn(),
-			setColorsFromModel: vi.fn(),
-			setAxesFromModel: vi.fn(),
-			render: vi.fn(),
-			dispose: vi.fn(),
-			selectMaskInLasso: vi.fn(() => new Uint8Array([255])), // non-empty
-			setSize: vi.fn(),
-		};
-	},
-}));
-
-vi.mock("../src/raf_controller", () => ({
-	createRafController: () => ({ start: vi.fn(), stop: vi.fn() }),
-}));
-
-vi.mock("../src/model_bindings", () => ({
-	bindModelToView: () => ({ dispose: vi.fn() }),
-}));
-
-vi.mock("../src/tooltip_controller", () => ({
-	createTooltipController: () => ({
-		dispose: vi.fn(),
-		onTooltipResponseChange: vi.fn(),
-	}),
-}));
-
-vi.mock("../src/labels_controller", () => ({
-	createLabelsController: () => ({ refresh: vi.fn(), dispose: vi.fn() }),
-}));
-
-// NOTE: do NOT mock interaction_controller or resize_controller here; we want real logic.
-import { buildWidget } from "../src/index";
-
-// Helper to dispatch pointer events in jsdom
+// Helper to dispatch pointer events
 function pe(
 	type: string,
 	target: HTMLElement,
@@ -66,212 +30,210 @@ function key(target: HTMLElement, k: string) {
 	);
 }
 
-function ensureLabelSelected(root: HTMLElement) {
-	const sel = root.querySelector(
-		'[data-testid="label-select"]',
-	) as HTMLSelectElement | null;
-	if (!sel)
-		throw new Error("Missing [data-testid=label-select] on label select");
-
-	if (sel.options.length === 0) {
-		sel.add(new Option("testlabel", "testlabel"));
-	}
-
-	const first = sel.options.item(0);
-	if (!first || !first.value) {
-		throw new Error("label-select has no usable option value");
-	}
-
-	sel.value = first.value;
-	sel.dispatchEvent(new Event("change", { bubbles: true }));
+function makeRect(w: number, h: number) {
+	return {
+		x: 0,
+		y: 0,
+		left: 0,
+		top: 0,
+		right: w,
+		bottom: h,
+		width: w,
+		height: h,
+		toJSON() {},
+	} as any;
 }
 
-function clickLasso(root: HTMLElement) {
-	const btn =
-		(root.querySelector(
-			'[data-testid="mode-lasso"]',
-		) as HTMLButtonElement | null) ??
-		Array.from(root.querySelectorAll("button")).find((b) =>
-			(b.textContent ?? "").toLowerCase().includes("lasso"),
-		);
-
-	if (!btn)
-		throw new Error(
-			"Could not find lasso button (add data-testid='mode-lasso')",
-		);
-	btn.click();
+function makeBar() {
+	// Minimal ControlBar: just the buttons that interaction_controller uses.
+	// No UI/UX behavior changes, just test scaffolding.
+	return {
+		rotateBtn: document.createElement("button"),
+		lassoBtn: document.createElement("button"),
+		addBtn: document.createElement("button"),
+		removeBtn: document.createElement("button"),
+	} as any;
 }
 
-describe("lasso emits request", () => {
+describe("interaction_controller: lasso commit emits model request", () => {
 	beforeEach(() => {
 		document.body.innerHTML = "";
+		Object.defineProperty(window, "devicePixelRatio", {
+			value: 1,
+			configurable: true,
+		});
 	});
 
-	it("emits lasso_request_t after drawing and pressing Enter", () => {
-		const el = document.createElement("div");
-		document.body.appendChild(el);
-
-		const model = new FakeModel();
-		// Mark transport as ready for the UX gate.
-		(model as any).widget_manager = { comm: {} };
-
-		const h = buildWidget(model as any, el, { startRaf: false });
-
-		// Ensure canvas has a real rect so pointerInfoFromEvent sets isInside=true
-		vi.spyOn(h.overlayCanvas, "getBoundingClientRect").mockImplementation(
-			() =>
-				({
-					x: 0,
-					y: 0,
-					left: 0,
-					top: 0,
-					right: 400,
-					bottom: 300,
-					width: 400,
-					height: 300,
-					toJSON() {},
-				}) as any,
-		);
-
-		// Switch to lasso mode and select a label
-		clickLasso(h.root);
-		ensureLabelSelected(h.root);
-
-		expect(getComputedStyle(h.overlayCanvas).pointerEvents).toBe("auto");
-
-		// Draw a gesture
-		pe("pointerdown", h.overlayCanvas, {
-			clientX: 10,
-			clientY: 10,
-			buttons: 1,
-		});
-		pe("pointermove", h.overlayCanvas, {
-			clientX: 20,
-			clientY: 20,
-			buttons: 1,
-		});
-		pe("pointermove", h.overlayCanvas, {
-			clientX: 30,
-			clientY: 10,
-			buttons: 1,
-		});
-		pe("pointerup", h.overlayCanvas, { clientX: 30, clientY: 10, buttons: 0 });
-
-		// Commit happens on Enter
-		key(h.root, "Enter");
-
-		const setKeys = model.setCalls.map((c) => c.key);
-
-		// These are the contract of the lasso commit.
-		expect(setKeys).toContain("lasso_mask_t");
-		expect(setKeys).toContain("lasso_request_t");
-
-		expect(model.saveCalls).toBeGreaterThan(0);
-
-		h.cleanup();
+	afterEach(() => {
+		vi.restoreAllMocks();
 	});
 
-	it("does not emit when canvas is 0×0; emits after forceResize makes it non-zero", () => {
-		const el = document.createElement("div");
-		document.body.appendChild(el);
+	it("emits lasso_mask_t and lasso_request_t with correct payload after Enter", () => {
+		// DOM
+		const root = document.createElement("div");
+		const canvas = document.createElement("canvas");
+		root.appendChild(canvas);
+		document.body.appendChild(root);
 
+		// Stable geometry: pointerInfoFromEvent depends on getBoundingClientRect
+		vi.spyOn(canvas, "getBoundingClientRect").mockImplementation(() =>
+			makeRect(400, 300),
+		);
+
+		// jsdom may not implement pointer capture; keep controller quiet
+		Object.defineProperty(canvas, "setPointerCapture", {
+			value: vi.fn(),
+			configurable: true,
+		});
+
+		// Model
 		const model = new FakeModel();
-		// Mark transport as ready for the UX gate.
-		(model as any).widget_manager = { comm: {} };
+		model.set(TRAITS.activeCategory, "testlabel");
+		model.set(TRAITS.interactionMode, "lasso");
 
-		const h = buildWidget(model as any, el, { startRaf: false });
+		// ThreeScene stub: controller calls selectMaskInLasso(polygonNdc)
+		const selectMaskInLasso = vi.fn(() => new Uint8Array([255]));
+		const three = { selectMaskInLasso } as any;
 
-		// Lasso mode + label chosen
-		clickLasso(h.root);
-		ensureLabelSelected(h.root);
+		// State: controller refuses pointerdown unless size is > 0
+		const state = createInteractionState();
+		state.dpr = 1;
+		state.pixelWidth = 400;
+		state.pixelHeight = 300;
 
-		// Overlay rect: first 0×0 (outside), then valid (inside)
-		let call = 0;
-		vi.spyOn(h.overlayCanvas, "getBoundingClientRect").mockImplementation(
-			() => {
-				call += 1;
-				if (call === 1) {
-					return {
-						x: 0,
-						y: 0,
-						left: 0,
-						top: 0,
-						right: 0,
-						bottom: 0,
-						width: 0,
-						height: 0,
-						toJSON() {},
-					} as any;
-				}
-				return {
-					x: 0,
-					y: 0,
-					left: 0,
-					top: 0,
-					right: 400,
-					bottom: 300,
-					width: 400,
-					height: 300,
-					toJSON() {},
-				} as any;
-			},
-		);
+		// Bar + deps
+		const bar = makeBar();
+		const syncUiFromState = vi.fn();
 
-		// Before resize: pointerdown is outside; Enter should NOT produce lasso traits.
-		pe("pointerdown", h.overlayCanvas, {
-			clientX: 10,
-			clientY: 10,
-			buttons: 1,
+		const showMessage = vi.fn();
+		const clearMessage = vi.fn();
+		const transportReady = () => true;
+
+		const ignores: string[] = [];
+		const controller = createInteractionController({
+			model: model as any,
+			three,
+			bar,
+			state,
+			root,
+			canvas,
+			syncUiFromState,
+			signal: new AbortController().signal,
+			transportReady,
+			showMessage,
+			clearMessage,
+			debug: { onIgnoreLasso: (r) => ignores.push(r) },
 		});
-		pe("pointerup", h.overlayCanvas, { clientX: 20, clientY: 20, buttons: 0 });
-		key(h.root, "Enter");
 
-		const keysPre = model.setCalls.map((c) => c.key);
-		expect(keysPre).not.toContain("lasso_mask_t");
-		expect(keysPre).not.toContain("lasso_request_t");
+		// Put controller into lasso mode the *same way the user does* (button click).
+		// This also sets local state.operation = "add".
+		bar.lassoBtn.click();
 
-		// Now simulate layout becoming valid (without rerender)
-		vi.spyOn(h.canvasHost, "getBoundingClientRect").mockImplementation(
-			() =>
-				({
-					x: 0,
-					y: 0,
-					left: 0,
-					top: 0,
-					right: 400,
-					bottom: 300,
-					width: 400,
-					height: 300,
-					toJSON() {},
-				}) as any,
-		);
+		// Draw a 3-point lasso
+		pe("pointerdown", canvas, { clientX: 10, clientY: 10, buttons: 1 });
+		pe("pointermove", canvas, { clientX: 20, clientY: 20, buttons: 1 });
+		pe("pointermove", canvas, { clientX: 30, clientY: 10, buttons: 1 });
+		pe("pointerup", canvas, { clientX: 30, clientY: 10, buttons: 0 });
 
-		h.forceResize();
+		// Commit via Enter (user-facing behavior)
+		key(root, "Enter");
 
-		// After resize: gesture + Enter should emit lasso
-		pe("pointerdown", h.overlayCanvas, {
-			clientX: 10,
-			clientY: 10,
-			buttons: 1,
-		});
-		pe("pointermove", h.overlayCanvas, {
-			clientX: 20,
-			clientY: 20,
-			buttons: 1,
-		});
-		pe("pointermove", h.overlayCanvas, {
-			clientX: 30,
-			clientY: 10,
-			buttons: 1,
-		});
-		pe("pointerup", h.overlayCanvas, { clientX: 30, clientY: 10, buttons: 0 });
-		key(h.root, "Enter");
+		// No ignores, no warning messages
+		expect(ignores).toEqual([]);
+		expect(showMessage).not.toHaveBeenCalled();
 
+		// Polygon should have been used to generate mask
+		expect(selectMaskInLasso).toHaveBeenCalledTimes(1);
+		expect(selectMaskInLasso.mock.calls[0][0]).toEqual([
+			// We only care about order + NDC mapping; NDC comes from pointerInfoFromEvent.
+			// With rect 400x300:
+			// (10,10) => x=10/400=0.025 => ndc=-0.95 ; y=10/300=0.0333 => ndc=+0.9333
+			// etc.
+			{ x: -0.95, y: 0.9333333333333333 },
+			{ x: -0.9, y: 0.8666666666666667 },
+			{ x: -0.85, y: 0.9333333333333333 },
+		]);
+
+		// Model writes: mask then request then save_changes
 		const setKeys = model.setCalls.map((c) => c.key);
-		expect(setKeys).toContain("lasso_mask_t");
-		expect(setKeys).toContain("lasso_request_t");
+		expect(setKeys).toContain(TRAITS.lassoMask);
+		expect(setKeys).toContain(TRAITS.lassoRequest);
 		expect(model.saveCalls).toBeGreaterThan(0);
 
-		h.cleanup();
+		// Mask is base64 for [255]
+		const maskSet = model.setCalls.find((c) => c.key === TRAITS.lassoMask);
+		expect(maskSet?.value).toBe("/w==");
+
+		// Request payload is strict and correct
+		const reqSet = model.setCalls.find((c) => c.key === TRAITS.lassoRequest);
+		expect(reqSet?.value).toEqual<LassoRequest>({
+			kind: "lasso_commit",
+			op: "add",
+			label: "testlabel",
+			request_id: 1,
+		});
+
+		controller.dispose();
+	});
+
+	it("does not emit when selectMaskInLasso returns empty; records ignore reason", () => {
+		const root = document.createElement("div");
+		const canvas = document.createElement("canvas");
+		root.appendChild(canvas);
+		document.body.appendChild(root);
+
+		vi.spyOn(canvas, "getBoundingClientRect").mockImplementation(() =>
+			makeRect(400, 300),
+		);
+
+		Object.defineProperty(canvas, "setPointerCapture", {
+			value: vi.fn(),
+			configurable: true,
+		});
+
+		const model = new FakeModel();
+		model.set(TRAITS.activeCategory, "testlabel");
+		model.set(TRAITS.interactionMode, "lasso");
+
+		const three = { selectMaskInLasso: vi.fn(() => new Uint8Array()) } as any;
+
+		const state = createInteractionState();
+		state.dpr = 1;
+		state.pixelWidth = 400;
+		state.pixelHeight = 300;
+
+		const bar = makeBar();
+		const syncUiFromState = vi.fn();
+
+		const ignores: string[] = [];
+		createInteractionController({
+			model: model as any,
+			three,
+			bar,
+			state,
+			root,
+			canvas,
+			syncUiFromState,
+			signal: new AbortController().signal,
+			transportReady: () => true,
+			showMessage: vi.fn(),
+			clearMessage: vi.fn(),
+			debug: { onIgnoreLasso: (r) => ignores.push(r) },
+		});
+
+		bar.lassoBtn.click();
+
+		pe("pointerdown", canvas, { clientX: 10, clientY: 10, buttons: 1 });
+		pe("pointermove", canvas, { clientX: 20, clientY: 20, buttons: 1 });
+		pe("pointermove", canvas, { clientX: 30, clientY: 10, buttons: 1 });
+		pe("pointerup", canvas, { clientX: 30, clientY: 10, buttons: 0 });
+
+		key(root, "Enter");
+
+		const setKeys = model.setCalls.map((c) => c.key);
+		expect(setKeys).not.toContain(TRAITS.lassoMask);
+		expect(setKeys).not.toContain(TRAITS.lassoRequest);
+
+		expect(ignores).toContain("empty-mask");
 	});
 });

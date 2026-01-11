@@ -1,15 +1,7 @@
+import type { PointerInfo } from "./interaction";
+
 const MIN_WIDGET_HEIGHT = "300px";
 const MIN_PLOT_HEIGHT = "240px";
-
-export type PointerInfo = {
-	cssX: number;
-	cssY: number;
-	normDevCoordX: number; // -1..1
-	normDevCoordY: number; // -1..1
-	isInside: boolean;
-};
-
-let __scatter3d_ptrLogN = 0;
 
 export function get2dContext(canvas: HTMLCanvasElement) {
 	return canvas.getContext("2d");

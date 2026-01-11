@@ -132,14 +132,16 @@ class Category:
     def _initialize_label_list(self, values, label_list):
         unique_labels = self._get_unique_labels_in_values(values)
         if label_list is not None:
-            labels_not_in_label_list = set(label_list).difference(unique_labels)
-            if labels_not_in_label_list:
+            missing = set(unique_labels).difference(label_list)
+            if missing:
                 raise RuntimeError(
-                    f"To initialize the label list we need a label list to include all unique values, these are missing: {labels_not_in_label_list}"
+                    "To initialize the label list we need a label list to include all "
+                    f"unique values, these are missing: {missing}"
                 )
+            # Keep user-provided order as-is (do not sort).
+            return list(label_list)
         else:
-            label_list = sorted(unique_labels)
-        return label_list
+            return sorted(unique_labels)
 
     @staticmethod
     def _create_label_coding(label_list):
@@ -613,9 +615,16 @@ class Scatter3dWidget(anywidget.AnyWidget):
             self.send_state("interactive_ready_t")
 
     def _set_default_sizes(self):
-        max = float(numpy.abs(self.xyz).max())
-        self.point_size_t = max / 20.0
-        self.axis_label_size_t = max / 5.0
+        # If there are no points, keep deterministic defaults.
+        # This must never crash widget construction.
+        if self.num_points == 0:
+            self.point_size_t = float(DEFAULT_POINT_SIZE)
+            self.axis_label_size_t = float(DEFAULT_AXIS_LABEL_SIZE)
+            return
+
+        max_abs = float(numpy.abs(self.xyz).max())
+        self.point_size_t = max_abs / 20.0
+        self.axis_label_size_t = max_abs / 5.0
 
     def _normalize_point_ids(self, point_ids):
         num_points = self.num_points

@@ -218,3 +218,48 @@ def test_cannot_clear_active_category_in_lasso_mode():
 
     with pytest.raises(traitlets.TraitError):
         w.active_category_t = ""
+
+
+def test_can_clear_active_category_in_rotate_mode():
+    xyz = numpy.zeros((3, 3), dtype=numpy.float32)
+    cat = Category(pandas.Series(["a", "b", "b"]))
+    w = Scatter3dWidget(xyz=xyz, category=cat)
+
+    # Rotate mode is default
+    assert w.interaction_mode_t == "rotate"
+
+    # Set a valid active category, then clear it: must be allowed in rotate mode.
+    w.active_category_t = "a"
+    w.active_category_t = ""
+    assert w.active_category_t == ""
+
+
+def test_zero_point_category_is_present_and_selectable():
+    xyz = numpy.zeros((3, 3), dtype=numpy.float32)
+
+    # Only "a" and "b" appear in the values, but we force label_list to include "c" (zero points).
+    cat = Category(pandas.Series(["a", "b", "b"]), label_list=["a", "b", "c"])
+    w = Scatter3dWidget(xyz=xyz, category=cat)
+
+    # Must be present in the synced labels
+    assert w.labels_t == ["a", "b", "c"]
+
+    # Rotate mode: selecting "c" must be allowed
+    w.active_category_t = "c"
+    assert w.active_category_t == "c"
+
+    # Lasso mode: "c" must also be selectable and non-empty enforced
+    w.interaction_mode_t = "lasso"
+    w.active_category_t = "c"
+    assert w.active_category_t == "c"
+
+
+def test_cannot_enter_lasso_mode_when_no_labels():
+    xyz = numpy.zeros((0, 3), dtype=numpy.float32)
+    cat = Category(pandas.Series([], dtype="object"), label_list=[])
+
+    w = Scatter3dWidget(xyz=xyz, category=cat)
+    assert w.labels_t == []
+
+    with pytest.raises(RuntimeError, match="labels_t is empty"):
+        w.interaction_mode_t = "lasso"
