@@ -287,13 +287,19 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 	);
 
 	// keyboard
-	root.addEventListener(
+	// keyboard
+	// Listen globally so Enter/Escape work reliably even if focus is not on `root`.
+	// IMPORTANT: gate behavior by state.mode.kind to avoid interfering with other widget modes.
+	window.addEventListener(
 		"keydown",
 		(e) => {
 			if (e.key === "Escape") {
-				cancelLasso(state);
-				syncUiFromState();
-				e.preventDefault();
+				// Escape should cancel any in-progress lasso regardless of focus.
+				if (state.mode.kind === "lasso") {
+					cancelLasso(state);
+					syncUiFromState();
+					e.preventDefault();
+				}
 				return;
 			}
 

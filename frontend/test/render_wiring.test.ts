@@ -1,5 +1,8 @@
+import { TRAITS, changeEvent } from "../src/model";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { FakeModel } from "./fake_model";
+
+let lastThree: any = null;
 
 // --- MOCKS ---
 // Goal: keep buildWidget() running without real three.js, raf loop, resize observers, etc.
@@ -10,7 +13,7 @@ vi.mock("../src/three_scene", () => {
 	return {
 		createThreeScene: () => {
 			const domElement = document.createElement("canvas");
-			return {
+			lastThree = {
 				domElement,
 				setPointsFromModel: vi.fn(),
 				setColorsFromModel: vi.fn(),
@@ -18,6 +21,7 @@ vi.mock("../src/three_scene", () => {
 				render: vi.fn(),
 				dispose: vi.fn(),
 			};
+			return lastThree;
 		},
 	};
 });
@@ -32,13 +36,12 @@ vi.mock("../src/raf_controller", () => {
 	};
 });
 
-// Mock controllers/bindings to avoid needing their internal dependencies.
-// We still want to record model.on calls *from inside buildWidget*;
-// but our debug wrapper will record calls even if controllers register them.
-// For now these can just return disposable shells.
-vi.mock("../src/model_bindings", () => ({
-	bindModelToView: () => ({ dispose: vi.fn() }),
-}));
+vi.mock("../src/model_bindings", async () => {
+	const actual = await vi.importActual<any>("../src/model_bindings");
+	return {
+		...actual,
+	};
+});
 
 vi.mock("../src/tooltip_controller", () => ({
 	createTooltipController: () => ({
@@ -108,5 +111,39 @@ describe("buildWidget wiring", () => {
 		h.cleanup();
 		addSpy.mockRestore();
 		expect(document.body.contains(h.overlayCanvas)).toBe(false);
+	});
+
+	it("recolors points when coded_values_t changes", () => {
+		const el = document.createElement("div");
+		document.body.appendChild(el);
+
+		const model = new FakeModel();
+
+		// minimal trait state (same as other test)
+		model.set("labels_t", []);
+		model.set("colors_t", []);
+		model.set("active_category_t", "");
+		model.set("interaction_mode_t", "rotate");
+		model.set("legend_side_t", "right");
+		model.set("legend_dock_t", "top");
+
+		const h = buildWidget(model as any, el);
+
+		// Sanity: createThreeScene ran and we captured the instance
+		expect(lastThree).toBeTruthy();
+
+		// Simulate Python pushing new coded values (payload doesn't matter for this wiring test)
+		model.set(TRAITS.codedValues, new Uint8Array([0, 0, 1, 0])); // arbitrary bytes
+		model.emit(changeEvent(TRAITS.codedValues));
+
+		const before = lastThree.setColorsFromModel.mock.calls.length;
+
+		model.set(TRAITS.codedValues, new Uint8Array([0, 0, 1, 0]));
+		model.emit(changeEvent(TRAITS.codedValues));
+
+		const after = lastThree.setColorsFromModel.mock.calls.length;
+		expect(after).toBe(before + 1);
+
+		h.cleanup();
 	});
 });
