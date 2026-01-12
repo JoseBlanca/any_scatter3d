@@ -62,15 +62,13 @@ describe("interaction_controller: lasso transport warning", () => {
 			clearMessage,
 		});
 
-		// Act: user clicks lasso
-		bar.lassoBtn.click();
-
-		// Assert: warning shown
-		expect(showMessage).toHaveBeenCalledTimes(1);
-		expect(String(showMessage.mock.calls[0][0])).toMatch(/not interactive/i);
-
+		// Snapshot BEFORE click (constructor may set initial mode)
 		const prevSetCalls = model.setCalls.length;
 		const prevSaveCalls = model.saveCalls;
+		const prevClearCalls = clearMessage.mock.calls.length;
+
+		// Act: user clicks lasso
+		bar.lassoBtn.click();
 
 		// Assert: warning shown
 		expect(showMessage).toHaveBeenCalledTimes(1);
@@ -83,10 +81,7 @@ describe("interaction_controller: lasso transport warning", () => {
 		// And no save_changes caused by the click
 		expect(model.saveCalls).toBe(prevSaveCalls);
 
-		// clearMessage should not be called because we early-return before it
-		expect(clearMessage).not.toHaveBeenCalled();
-
-		// clearMessage should not be called because we early-return before it
-		expect(clearMessage).not.toHaveBeenCalled();
+		// clearMessage should not be called by the click (early-return before it)
+		expect(clearMessage.mock.calls.length).toBe(prevClearCalls);
 	});
 });

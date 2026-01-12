@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.18.4"
+__generated_with = "0.19.2"
 app = marimo.App(width="medium")
 
 
@@ -12,7 +12,7 @@ def _():
     import numpy as np
     import pandas
 
-    num_points = 100000
+    num_points = 10
 
     point_ids = [f"id_{i}" for i in range(1, num_points + 1)]
     points = np.random.randn(num_points, 3)

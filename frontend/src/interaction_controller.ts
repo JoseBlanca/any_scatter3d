@@ -71,23 +71,34 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 	} = deps;
 
 	// initial mode
-	setMode(state, { kind: "rotate" });
-	syncUiFromState();
+	function applyMode(
+		next: { kind: "rotate" } | { kind: "lasso"; operation: LassoOp },
+	) {
+		clearMessage();
+
+		// Keep Python authoritative: set the trait.
+		model.set(TRAITS.interactionMode, next.kind);
+		model.save_changes();
+
+		// Update local state + UI immediately (do not wait for model observers).
+		if (next.kind === "rotate") {
+			setMode(state, { kind: "rotate" });
+		} else {
+			setMode(state, { kind: "lasso", operation: next.operation });
+		}
+
+		syncUiFromState();
+		root.focus();
+	}
+
+	// initial mode
+	applyMode({ kind: "rotate" });
 
 	// toolbar buttons
 	bar.rotateBtn.addEventListener(
 		"click",
 		() => {
-			clearMessage();
-
-			// Keep Python authoritative: set the trait.
-			model.set(TRAITS.interactionMode, "rotate");
-			model.save_changes();
-
-			// Update local UI/state immediately (do not wait on model observers).
-			setMode(state, { kind: "rotate" });
-			syncUiFromState();
-			root.focus();
+			applyMode({ kind: "rotate" });
 		},
 		{ signal },
 	);
@@ -103,15 +114,7 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 			}
 
 			clearMessage();
-
-			// Keep Python authoritative: set the trait.
-			model.set(TRAITS.interactionMode, "lasso");
-			model.save_changes();
-
-			// Local state follows the model (op remains frontend-only)
-			setMode(state, { kind: "lasso", operation: "add" });
-			syncUiFromState();
-			root.focus();
+			applyMode({ kind: "lasso", operation: "add" });
 		},
 		{ signal },
 	);
@@ -120,8 +123,7 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 		"click",
 		() => {
 			if (state.mode.kind !== "lasso") return;
-			setMode(state, { kind: "lasso", operation: "add" });
-			syncUiFromState();
+			applyMode({ kind: "lasso", operation: "add" });
 		},
 		{ signal },
 	);
@@ -130,8 +132,7 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 		"click",
 		() => {
 			if (state.mode.kind !== "lasso") return;
-			setMode(state, { kind: "lasso", operation: "remove" });
-			syncUiFromState();
+			applyMode({ kind: "lasso", operation: "remove" });
 		},
 		{ signal },
 	);
