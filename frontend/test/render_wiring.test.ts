@@ -17,6 +17,7 @@ vi.mock("../src/three_scene", () => {
 				domElement,
 				setPointsFromModel: vi.fn(),
 				setColorsFromModel: vi.fn(),
+				setSizesFromModel: vi.fn(),
 				setAxesFromModel: vi.fn(),
 				render: vi.fn(),
 				dispose: vi.fn(),
@@ -132,17 +133,37 @@ describe("buildWidget wiring", () => {
 		// Sanity: createThreeScene ran and we captured the instance
 		expect(lastThree).toBeTruthy();
 
-		// Simulate Python pushing new coded values (payload doesn't matter for this wiring test)
+		const beforeColors = lastThree.setColorsFromModel.mock.calls.length;
+		const beforeSizes = lastThree.setSizesFromModel.mock.calls.length;
+
 		model.set(TRAITS.codedValues, new Uint8Array([0, 0, 1, 0])); // arbitrary bytes
 		model.emit(changeEvent(TRAITS.codedValues));
 
-		const before = lastThree.setColorsFromModel.mock.calls.length;
+		expect(lastThree.setColorsFromModel.mock.calls.length).toBe(
+			beforeColors + 1,
+		);
+		expect(lastThree.setSizesFromModel.mock.calls.length).toBe(beforeSizes + 1);
 
-		model.set(TRAITS.codedValues, new Uint8Array([0, 0, 1, 0]));
-		model.emit(changeEvent(TRAITS.codedValues));
+		h.cleanup();
+	});
+	it("initializes point sizes on startup", () => {
+		const el = document.createElement("div");
+		document.body.appendChild(el);
 
-		const after = lastThree.setColorsFromModel.mock.calls.length;
-		expect(after).toBe(before + 1);
+		const model = new FakeModel();
+
+		// minimal trait state (same as other tests)
+		model.set("labels_t", []);
+		model.set("colors_t", []);
+		model.set("active_category_t", "");
+		model.set("interaction_mode_t", "rotate");
+		model.set("legend_side_t", "right");
+		model.set("legend_dock_t", "top");
+
+		const h = buildWidget(model as any, el);
+
+		expect(lastThree).toBeTruthy();
+		expect(lastThree.setSizesFromModel).toHaveBeenCalledTimes(1);
 
 		h.cleanup();
 	});

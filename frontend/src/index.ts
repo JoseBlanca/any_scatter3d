@@ -184,9 +184,9 @@ export function buildWidget(
 	transport.announceClientReadyOnce();
 
 	function transportReady(): boolean {
-	// No TDZ risk: transport is already initialized.
-	transport.announceClientReadyOnce();
-	return transport.isReady();
+		// No TDZ risk: transport is already initialized.
+		transport.announceClientReadyOnce();
+		return transport.isReady();
 	}
 
 	// --- Legend ---
@@ -196,9 +196,9 @@ export function buildWidget(
 
 	const legendView = createLegendView(legendHost);
 	const legendController = createLegendController({
-	model: dbgModel,
-	view: legendView,
-	transportReady,
+		model: dbgModel,
+		view: legendView,
+		transportReady,
 	});
 
 	// Initial render once traits are present
@@ -283,6 +283,7 @@ export function buildWidget(
 	// Initial data push
 	three.setPointsFromModel();
 	three.setColorsFromModel();
+	three.setSizesFromModel();
 	three.setAxesFromModel();
 
 	// Resize

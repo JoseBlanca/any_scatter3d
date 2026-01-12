@@ -187,8 +187,9 @@ export function createThreeScene(
 			uPixelRatio: { value: window.devicePixelRatio || 1 },
 		},
 		vertexShader: `
+		uniform float uPixelRatio;
+
 		attribute float size;
-		attribute vec3 color;
 		varying vec3 vColor;
 
 		void main() {
@@ -566,6 +567,16 @@ export function createThreeScene(
 	}
 
 	function render() {
+		const s = (geom.getAttribute("size") as THREE.BufferAttribute)
+			.array as Float32Array;
+		let maxS = 0;
+		for (let i = 0; i < s.length; i++) if (s[i] > maxS) maxS = s[i];
+		if (!(maxS > 0)) {
+			throw new Error(
+				"Points not visible: size attribute max is 0 (setSizesFromModel was likely never called).",
+			);
+		}
+
 		controls.update();
 		renderer.render(scene, camera);
 	}

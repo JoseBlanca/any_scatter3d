@@ -20,8 +20,13 @@ export function bindModelToView(deps: ModelBindingsDeps): {
 
 	const onXYZChange = () => {
 		three.setPointsFromModel();
-		// safe + robust: points changed => colors need reapply
+		// points changed => dependent buffers must be recomputed
 		three.setColorsFromModel();
+		three.setSizesFromModel();
+	};
+
+	const onPointSizeChange = () => {
+		three.setSizesFromModel();
 	};
 
 	// Legend traits changed: refresh legend UI and recolor points (robust path)
@@ -34,6 +39,7 @@ export function bindModelToView(deps: ModelBindingsDeps): {
 	// Non-legend changes that still affect point colors (coded values)
 	const onCodedValuesChange = () => {
 		three.setColorsFromModel();
+		three.setSizesFromModel();
 	};
 
 	const onLassoResultChange = () => {
@@ -59,6 +65,7 @@ export function bindModelToView(deps: ModelBindingsDeps): {
 	// Wire events
 	model.on(changeEvent(TRAITS.tooltipResponse), onTooltipResponseChange);
 	model.on(changeEvent(TRAITS.xyzBytes), onXYZChange);
+	model.on(changeEvent(TRAITS.pointSize), onPointSizeChange);
 
 	// Colors depend on codedValues but legend does not
 	model.on(changeEvent(TRAITS.codedValues), onCodedValuesChange);
@@ -78,6 +85,7 @@ export function bindModelToView(deps: ModelBindingsDeps): {
 		dispose: () => {
 			model.off(changeEvent(TRAITS.tooltipResponse), onTooltipResponseChange);
 			model.off(changeEvent(TRAITS.xyzBytes), onXYZChange);
+			model.off(changeEvent(TRAITS.pointSize), onPointSizeChange);
 			model.off(changeEvent(TRAITS.codedValues), onCodedValuesChange);
 			model.off(changeEvent(TRAITS.labels), onLegendChange);
 			model.off(changeEvent(TRAITS.colors), onLegendChange);
