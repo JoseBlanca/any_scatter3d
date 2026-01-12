@@ -672,8 +672,8 @@ wheels = [
 ]
 
 [[package]]
-name = "scatter3d"
-version = "0.1.1"
+name = "scatter3d-anywidget"
+version = "0.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "anywidget" },
