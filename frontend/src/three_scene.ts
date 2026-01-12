@@ -529,7 +529,9 @@ export function createThreeScene(
 
 	function setSize(cssW: number, cssH: number, dpr: number) {
 		renderer.setPixelRatio(dpr);
-		renderer.setSize(cssW, cssH, false);
+		// CRITICAL: updateStyle must be true so the WebGL canvas CSS size matches the overlay canvas.
+		// If false, the lasso polygon (computed from overlay NDC) won’t match point projections.
+		renderer.setSize(cssW, cssH, true);
 		camera.aspect = cssW > 0 && cssH > 0 ? cssW / cssH : 1;
 		camera.updateProjectionMatrix();
 	}
