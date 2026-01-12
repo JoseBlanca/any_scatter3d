@@ -217,9 +217,12 @@ export function buildWidget(
 			setMode(state, { kind: "lasso", operation: op });
 		}
 
+		const operation =
+			state.mode.kind === "lasso" ? state.mode.operation : "add";
+
 		const uiState = {
 			mode,
-			operation: mode === "lasso" ? state.mode.operation : "add",
+			operation,
 		} as const;
 
 		renderControlBar(bar, uiCfg, uiState);
