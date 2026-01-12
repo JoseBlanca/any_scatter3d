@@ -3,6 +3,7 @@ import { FakeModel } from "./fake_model";
 import { createLegendView } from "../src/legend_view";
 import { createLegendController } from "../src/legend_controller";
 import { TRAITS } from "../src/model";
+import { DEFAULT_UI_CONFIG } from "../src/ui_config";
 
 function setupModel(model: FakeModel) {
 	model.set(TRAITS.labels, ["a", "b", "c"]);
@@ -26,7 +27,7 @@ describe("legend controller", () => {
 		model.set(TRAITS.interactionMode, "rotate");
 		model.set(TRAITS.activeCategory, null);
 
-		const view = createLegendView(host);
+		const view = createLegendView(host, DEFAULT_UI_CONFIG);
 		const ctrl = createLegendController({
 			model: model as any,
 			view,
@@ -75,7 +76,7 @@ describe("legend controller", () => {
 		model.set(TRAITS.interactionMode, "lasso");
 		model.set(TRAITS.activeCategory, "a");
 
-		const view = createLegendView(host);
+		const view = createLegendView(host, DEFAULT_UI_CONFIG);
 		const ctrl = createLegendController({
 			model: model as any,
 			view,
@@ -118,7 +119,7 @@ describe("legend controller", () => {
 		model.set(TRAITS.interactionMode, "rotate");
 		model.set(TRAITS.activeCategory, null);
 
-		const view = createLegendView(host);
+		const view = createLegendView(host, DEFAULT_UI_CONFIG);
 		const ctrl = createLegendController({
 			model: model as any,
 			view,
@@ -153,7 +154,7 @@ describe("legend controller", () => {
 		model.set(TRAITS.interactionMode, "rotate");
 		model.set(TRAITS.activeCategory, null);
 
-		const view = createLegendView(host);
+		const view = createLegendView(host, DEFAULT_UI_CONFIG);
 		const ctrl = createLegendController({
 			model: model as any,
 			view,
@@ -192,7 +193,7 @@ describe("legend controller", () => {
 		model.set(TRAITS.interactionMode, "rotate");
 		model.set(TRAITS.activeCategory, null);
 
-		const view = createLegendView(host);
+		const view = createLegendView(host, DEFAULT_UI_CONFIG);
 		const ctrl = createLegendController({
 			model: model as any,
 			view,
@@ -216,7 +217,7 @@ describe("legend controller", () => {
 		model.set(TRAITS.interactionMode, "rotate");
 		model.set(TRAITS.activeCategory, null);
 
-		const view = createLegendView(host);
+		const view = createLegendView(host, DEFAULT_UI_CONFIG);
 		const ctrl = createLegendController({
 			model: model as any,
 			view,

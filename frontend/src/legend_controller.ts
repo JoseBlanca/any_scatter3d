@@ -35,7 +35,8 @@ function readMode(x: unknown): LegendMode {
 }
 
 function readActive(x: unknown): string | null {
-	return typeof x === "string" ? x : null;
+  if (typeof x !== "string") return null;
+  return x === "" ? null : x; // defensive: empty string should behave like "no active"
 }
 
 export type LegendControllerDeps = {
@@ -46,36 +47,61 @@ export type LegendControllerDeps = {
 	transportReady: () => boolean;
 };
 
+function readSide(x: unknown): "left" | "right" {
+	return x === "left" ? "left" : "right";
+}
+
+function readDock(x: unknown): "top" | "bottom" {
+	return x === "bottom" ? "bottom" : "top";
+}
+
+
 export function createLegendController(deps: LegendControllerDeps): {
 	refreshFromModel: () => void;
 	dispose: () => void;
 } {
 	const { model, view, transportReady } = deps;
 
+	function safeSaveChanges(context: string) {
+		try {
+			const ret = model.save_changes();
+			// if promise-like, attach a rejection handler
+			if (ret && typeof (ret as any).then === "function") {
+			(ret as PromiseLike<unknown>).then(undefined, (err) => {
+				console.warn(`[legend] save_changes failed (${context})`, err);
+			});
+			}
+		} catch (err) {
+			console.warn(`[legend] save_changes threw (${context})`, err);
+		}
+	}
+
 	function refreshFromModel() {
 		const labels = readStringList(model.get(TRAITS.labels), "labels_t");
 		const colors = readRGBList(model.get(TRAITS.colors), "colors_t");
 
-		// Palette completeness (strict): must match labels one-to-one.
-		// This is required even if some labels have zero points.
 		if (colors.length !== labels.length) {
-			throw new Error(
-				`Palette incomplete: labels_t length=${labels.length} but colors_t length=${colors.length}`,
-			);
-		}
-
-		const mode = readMode(model.get(TRAITS.interactionMode));
-		const active = readActive(model.get(TRAITS.activeCategory));
-
-		view.render({
-			mode,
-			items: labels.map((label, i) => ({
-				label,
-				color: colors[i],
-				isActive: active !== null && label === active,
-			})),
-		});
+		throw new Error(
+			`Palette incomplete: labels_t length=${labels.length} but colors_t length=${colors.length}`,
+		);
 	}
+
+	const mode = readMode(model.get(TRAITS.interactionMode));
+	const active = readActive(model.get(TRAITS.activeCategory));
+
+	const side = readSide(model.get(TRAITS.legendSide));
+	const dock = readDock(model.get(TRAITS.legendDock));
+	view.setPlacement({ side, dock });
+
+	view.render({
+		mode,
+		items: labels.map((label, i) => ({
+			label,
+			color: colors[i],
+			isActive: active !== null && label === active,
+		})),
+	});
+}
 
 	function onLegendTraitChange() {
 		refreshFromModel();
@@ -85,7 +111,10 @@ export function createLegendController(deps: LegendControllerDeps): {
 	view.onItemClick((label) => {
 		// If transport is not ready, legend must be non-interactive.
 		// No UI/UX changes here: click is simply ignored.
-		if (!transportReady()) return;
+		if (!transportReady()) {
+  			console.warn("[legend] transport not ready yet (expected in marimo until cell run)");
+  			return;
+		}
 
 		const mode = readMode(model.get(TRAITS.interactionMode));
 		const active = readActive(model.get(TRAITS.activeCategory));
@@ -94,7 +123,7 @@ export function createLegendController(deps: LegendControllerDeps): {
 			// In lasso: clicking active is a no-op; cannot clear.
 			if (active !== null && label === active) return;
 			model.set(TRAITS.activeCategory, label);
-			model.save_changes();
+			safeSaveChanges("activeCategory");
 			return;
 		}
 
@@ -104,7 +133,7 @@ export function createLegendController(deps: LegendControllerDeps): {
 		} else {
 			model.set(TRAITS.activeCategory, label);
 		}
-		model.save_changes();
+		safeSaveChanges("activeCategory");
 	});
 
 	// Subscribe to authoritative traits
@@ -112,6 +141,8 @@ export function createLegendController(deps: LegendControllerDeps): {
 	model.on(`change:${TRAITS.colors}`, onLegendTraitChange);
 	model.on(`change:${TRAITS.activeCategory}`, onLegendTraitChange);
 	model.on(`change:${TRAITS.interactionMode}`, onLegendTraitChange);
+	model.on(`change:${TRAITS.legendSide}`, onLegendTraitChange);
+	model.on(`change:${TRAITS.legendDock}`, onLegendTraitChange);
 
 	return {
 		refreshFromModel,
@@ -120,6 +151,8 @@ export function createLegendController(deps: LegendControllerDeps): {
 			model.off(`change:${TRAITS.colors}`, onLegendTraitChange);
 			model.off(`change:${TRAITS.activeCategory}`, onLegendTraitChange);
 			model.off(`change:${TRAITS.interactionMode}`, onLegendTraitChange);
+			model.off(`change:${TRAITS.legendSide}`, onLegendTraitChange);
+			model.off(`change:${TRAITS.legendDock}`, onLegendTraitChange);
 		},
 	};
 }

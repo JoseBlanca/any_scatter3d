@@ -2,31 +2,25 @@ import type { WidgetModel } from "./model";
 import { TRAITS } from "./model";
 
 export type TransportReadyController = {
-	/** Authoritative readiness (Python-controlled). */
 	isReady: () => boolean;
-
-	/**
-	 * Attempt the one-time handshake: set client_ready_t and save_changes().
-	 * Never throws; never infers readiness from return values.
-	 */
 	announceClientReadyOnce: () => void;
-
-	/** Subscribe to readiness flips. Returns unsubscribe. */
 	onReadyChange: (cb: () => void) => () => void;
-
 	dispose: () => void;
 };
 
 export function createTransportReadyController(
 	model: WidgetModel,
-	opts?: {
-		onError?: (err: unknown) => void;
-	},
+	opts?: { onError?: (err: unknown) => void },
 ): TransportReadyController {
-	let announced = false;
+	let announcedOk = false;      // "Python acked" latch
+	let lastAttemptMs = -Infinity;
+	let inFlight = false;
+
 	const handlers = new Set<() => void>();
 
 	const onChange = () => {
+		// If Python acked, latch it. This is the only authoritative success condition.
+		if (model.get(TRAITS.interactiveReady) === true) announcedOk = true;
 		for (const h of handlers) h();
 	};
 
@@ -37,14 +31,49 @@ export function createTransportReadyController(
 	}
 
 	function announceClientReadyOnce() {
-		if (announced) return;
-		announced = true;
+		// Only Python can confirm readiness.
+		if (announcedOk || isReady()) {
+			announcedOk = true;
+			return;
+		}
 
+		// Avoid spamming
+		const now = performance.now();
+		if (now - lastAttemptMs < 250) return;
+		lastAttemptMs = now;
+
+		// Don't start a second attempt while one is in flight
+		if (inFlight) return;
+
+		// Force a real diff even if the JS model is stuck at true
+		if (model.get(TRAITS.clientReady) === true) {
+			model.set(TRAITS.clientReady, false);
+		}
 		model.set(TRAITS.clientReady, true);
+
 		try {
-			model.save_changes();
+			inFlight = true;
+			const ret = model.save_changes();
+
+			if (ret && typeof (ret as any).then === "function") {
+				(ret as PromiseLike<unknown>).then(
+					() => {
+						inFlight = false;
+						// Do NOT set announcedOk here; wait for interactive_ready_t
+					},
+					(err) => {
+						inFlight = false;
+						model.set(TRAITS.clientReady, false);
+						opts?.onError?.(err);
+					},
+				);
+			} else {
+				inFlight = false;
+				// Do NOT set announcedOk here; wait for interactive_ready_t
+			}
 		} catch (err) {
-			// Expected in "transport not ready yet" state.
+			inFlight = false;
+			model.set(TRAITS.clientReady, false);
 			opts?.onError?.(err);
 		}
 	}

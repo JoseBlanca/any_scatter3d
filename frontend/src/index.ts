@@ -192,7 +192,7 @@ export function buildWidget(
 	// --- Legend ---
 	const legendHost = document.createElement("div");
 	legendHost.dataset.testid = "legend-host";
-	toolbar.appendChild(legendHost);
+	canvasHost.appendChild(legendHost);
 
 	const legendView = createLegendView(legendHost, DEFAULT_UI_CONFIG);
 	const legendController = createLegendController({

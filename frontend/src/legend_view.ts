@@ -19,6 +19,10 @@ export type LegendView = {
 	el: HTMLElement;
 	render: (s: LegendViewState) => void;
 	onItemClick: (cb: (label: string) => void) => void;
+
+	// Overlay placement (host is positioned absolutely inside canvasHost)
+	setPlacement: (p: { side: "left" | "right"; dock: "top" | "bottom" }) => void;
+
 	dispose: () => void;
 };
 
@@ -27,10 +31,44 @@ export function createLegendView(host: HTMLElement, ui: UiConfig): LegendView {
 	el.dataset.testid = "legend";
 	host.appendChild(el);
 
+	// Host is the positioned overlay layer (we style host, not el).
+	host.style.position = "absolute";
+	// ui.legendOverlay must exist in UiConfig; if it doesn't yet, TS will complain until you add it.
+	host.style.zIndex = String(ui.legendOverlay.zIndex);
+	host.style.pointerEvents = "auto";
+
+	// The scroll container is the legend element itself.
+	el.style.pointerEvents = "auto";
+	el.style.boxSizing = "border-box";
+	el.style.background = ui.legendOverlay.bg;
+	el.style.border = ui.legendOverlay.border;
+	el.style.borderRadius = `${ui.legendOverlay.borderRadiusPx}px`;
+	el.style.padding = `${ui.legendOverlay.paddingPx}px`;
+	el.style.boxShadow = ui.legendOverlay.boxShadow;
+	el.style.maxWidth = `${ui.legendOverlay.maxWidthPx}px`;
+	el.style.maxHeight = `${ui.legendOverlay.maxHeightPx}px`;
+	el.style.overflow = "auto";
+
 	let clickCb: ((label: string) => void) | null = null;
 
 	function onItemClick(cb: (label: string) => void) {
 		clickCb = cb;
+	}
+
+	function setPlacement(p: { side: "left" | "right"; dock: "top" | "bottom" }) {
+		const m = ui.legendOverlay.marginPx;
+
+		// reset
+		host.style.left = "";
+		host.style.right = "";
+		host.style.top = "";
+		host.style.bottom = "";
+
+		if (p.side === "left") host.style.left = `${m}px`;
+		else host.style.right = `${m}px`;
+
+		if (p.dock === "top") host.style.top = `${m}px`;
+		else host.style.bottom = `${m}px`;
 	}
 
 	function isRowActive(row: HTMLElement): boolean {
@@ -50,7 +88,7 @@ export function createLegendView(host: HTMLElement, ui: UiConfig): LegendView {
 		if (!row) return;
 		const label = row.dataset.legendLabel;
 		if (!label) return;
-		clickCb?.(label);
+		clickCb?.(label);	
 	}
 
 	// Hover must never trigger redraw; keep it view-local only.
@@ -85,7 +123,7 @@ export function createLegendView(host: HTMLElement, ui: UiConfig): LegendView {
 	function render(s: LegendViewState) {
 		el.innerHTML = "";
 
-		// Container-level styling (optional but keeps things consistent)
+		// Text styling (ok to keep here)
 		el.style.font = ui.legend.font;
 		el.style.color = ui.legend.textColor;
 
@@ -129,6 +167,7 @@ export function createLegendView(host: HTMLElement, ui: UiConfig): LegendView {
 		el,
 		render,
 		onItemClick,
+		setPlacement,
 		dispose: () => {
 			el.removeEventListener("click", handleClick);
 			el.removeEventListener("mouseover", handleMouseOver);

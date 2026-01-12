@@ -23,6 +23,17 @@ export type UiConfig = {
 		textColor: string;
 		font: string;
 	};
+	legendOverlay: {
+		zIndex: number;
+		marginPx: number;
+		maxWidthPx: number;
+		maxHeightPx: number;
+		paddingPx: number;
+		borderRadiusPx: number;
+		bg: string;
+		border: string;
+		boxShadow: string;
+	};
 	messages: {
 		marginLeftPx: number;
 		fontSizePx: number;
@@ -52,6 +63,17 @@ export const DEFAULT_UI_CONFIG: UiConfig = {
 		hoverRowBg: "rgba(0, 0, 0, 0.04)",
 		textColor: "#111827",
 		font: "system-ui, sans-serif",
+	},
+	legendOverlay: {
+		zIndex: 10,
+		marginPx: 12,
+		maxWidthPx: 240,
+		maxHeightPx: 220,
+		paddingPx: 8,
+		borderRadiusPx: 10,
+		bg: "rgba(255,255,255,0.92)",
+		border: "1px solid rgba(0,0,0,0.08)",
+		boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
 	},
 	messages: {
 		marginLeftPx: 8,
