@@ -12,7 +12,7 @@ export function createTransportReadyController(
 	model: WidgetModel,
 	opts?: { onError?: (err: unknown) => void },
 ): TransportReadyController {
-	let announcedOk = false;      // "Python acked" latch
+	let announcedOk = false; // "Python acked" latch
 	let lastAttemptMs = -Infinity;
 	let inFlight = false;
 

@@ -28,7 +28,7 @@ export const TRAITS = {
 	legendDock: "legend_dock_t",
 } as const;
 
-export type TraitKey = typeof TRAITS[keyof typeof TRAITS];
+export type TraitKey = (typeof TRAITS)[keyof typeof TRAITS];
 
 // 2) Domain types ===============================================================
 

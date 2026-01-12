@@ -88,7 +88,7 @@ export function createLegendView(host: HTMLElement, ui: UiConfig): LegendView {
 		if (!row) return;
 		const label = row.dataset.legendLabel;
 		if (!label) return;
-		clickCb?.(label);	
+		clickCb?.(label);
 	}
 
 	// Hover must never trigger redraw; keep it view-local only.
