@@ -5,13 +5,25 @@
 `scatter3d-anywidget` provides a high-performance, WebGL-based 3D scatter plot widget built on top of **[anywidget](https://anywidget.dev/)**.
 It is designed for exploratory data analysis workflows where users need to **interactively select, assign, and modify categories** on point clouds.
 
+![scatter3d widget example](docs/images/scatter_widget_example.png)
+
 ## Features
 
 * **3D scatter visualization** (WebGL / Three.js) (up to tens of thousands of points)
 * **Lasso selection** with *add* and *remove* operations
-* **Categorical annotation** backed by pandas or Polars Series thanks to [narhwals](https://narwhals-dev.github.io/narwhals/)
+* **Categorical annotation** backed by pandas or Polars Series thanks to [narwhals](https://narwhals-dev.github.io/narwhals/)
 * **Bidirectional sync** between Python state and frontend
 * Designed for **anywidget**, works well with **marimo** and Jupyter
+
+## Project status
+
+⚠️ **Alpha status**, this is alpha software that we are using in our research.
+
+This project is under active development.  
+APIs, traitlets, and frontend behavior may change without notice.
+
+Contributions and feedback are welcome.
+
 
 ## Installation
 
@@ -19,9 +31,13 @@ It is designed for exploratory data analysis workflows where users need to **int
 pip install scatter3d-anywidget
 ```
 
-Requires Python **≥ 3.13**.
-
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
+
+## Requirements
+
+- Python ≥ 3.13
+- Jupyter or marimo
+- WebGL-capable browser
 
 ## Basic usage
 
@@ -90,7 +106,7 @@ A wrapper around a categorical vector (pandas or Polars Series) that:
 
 * Encodes categories efficiently
 * Tracks unassigned values
-* Synchronizes category changes with the frontend
+* `Category` objects are **stateful**: updating them updates the widget, and vice versa.
 
 ### Lasso interaction
 
@@ -99,12 +115,6 @@ The lasso tool allows:
 * Selecting points in screen space
 * Adding or removing points from a category
 * Reading back selection results in Python
-
-## Project status
-
-This is alpha software that we are using in our research.
-
-Contributions and feedback are welcome.
 
 ## License
 
