@@ -5,7 +5,7 @@
 `scatter3d-anywidget` provides a high-performance, WebGL-based 3D scatter plot widget built on top of **[anywidget](https://anywidget.dev/)**.
 It is designed for exploratory data analysis workflows where users need to **interactively select, assign, and modify categories** on point clouds.
 
-![scatter3d widget example](docs/images/scatter_widget_example.png)
+![scatter3d widget example](scatter_widget_example.png)
 
 ## Features
 
