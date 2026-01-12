@@ -1,4 +1,6 @@
+// legend_view.ts
 import type { RGB } from "./model";
+import type { UiConfig } from "./ui_config";
 
 export type LegendItem = {
 	label: string;
@@ -20,7 +22,7 @@ export type LegendView = {
 	dispose: () => void;
 };
 
-export function createLegendView(host: HTMLElement): LegendView {
+export function createLegendView(host: HTMLElement, ui: UiConfig): LegendView {
 	const el = document.createElement("div");
 	el.dataset.testid = "legend";
 	host.appendChild(el);
@@ -29,6 +31,16 @@ export function createLegendView(host: HTMLElement): LegendView {
 
 	function onItemClick(cb: (label: string) => void) {
 		clickCb = cb;
+	}
+
+	function isRowActive(row: HTMLElement): boolean {
+		return row.dataset.active === "1";
+	}
+
+	function applyRowBg(row: HTMLElement) {
+		row.style.background = isRowActive(row)
+			? ui.legend.activeRowBg
+			: "transparent";
 	}
 
 	// Event delegation: keeps DOM wiring simple and avoids per-row listeners.
@@ -46,13 +58,24 @@ export function createLegendView(host: HTMLElement): LegendView {
 		const t = e.target as HTMLElement | null;
 		const row = t?.closest?.("[data-legend-label]") as HTMLElement | null;
 		if (!row) return;
+
 		row.dataset.hover = "1";
+
+		// If not active, show hover bg; if active, keep active bg.
+		if (!isRowActive(row)) {
+			row.style.background = ui.legend.hoverRowBg;
+		}
 	}
+
 	function handleMouseOut(e: MouseEvent) {
 		const t = e.target as HTMLElement | null;
 		const row = t?.closest?.("[data-legend-label]") as HTMLElement | null;
 		if (!row) return;
+
 		delete row.dataset.hover;
+
+		// Restore correct bg based on active state.
+		applyRowBg(row);
 	}
 
 	el.addEventListener("click", handleClick);
@@ -60,9 +83,11 @@ export function createLegendView(host: HTMLElement): LegendView {
 	el.addEventListener("mouseout", handleMouseOut);
 
 	function render(s: LegendViewState) {
-		// Minimal rendering (no layout decisions yet).
-		// Styling is intentionally basic; we’ll discuss final UX before wiring it into the widget.
 		el.innerHTML = "";
+
+		// Container-level styling (optional but keeps things consistent)
+		el.style.font = ui.legend.font;
+		el.style.color = ui.legend.textColor;
 
 		for (const item of s.items) {
 			const row = document.createElement("div");
@@ -71,19 +96,24 @@ export function createLegendView(host: HTMLElement): LegendView {
 			row.dataset.active = item.isActive ? "1" : "0";
 			row.dataset.mode = s.mode;
 
+			row.style.display = "flex";
+			row.style.alignItems = "center";
+			row.style.gap = `${ui.legend.rowGapPx}px`;
+			row.style.padding = ui.legend.rowPadding;
+			row.style.borderRadius = `${ui.legend.rowBorderRadiusPx}px`;
+			row.style.cursor = "pointer";
+			applyRowBg(row);
+
 			const swatch = document.createElement("span");
 			swatch.dataset.testid = `legend-swatch:${item.label}`;
-			// tiny inline swatch; real styling later
 			swatch.style.display = "inline-block";
 			swatch.style.width = "12px";
 			swatch.style.height = "12px";
-			swatch.style.marginRight = "6px";
-			swatch.style.verticalAlign = "middle";
-			swatch.style.background = `rgb(${Math.round(
-				item.color[0] * 255,
-			)}, ${Math.round(item.color[1] * 255)}, ${Math.round(
-				item.color[2] * 255,
-			)})`;
+			swatch.style.flex = "0 0 12px";
+			swatch.style.borderRadius = "2px";
+			swatch.style.background = `rgb(${Math.round(item.color[0] * 255)}, ${Math.round(
+				item.color[1] * 255,
+			)}, ${Math.round(item.color[2] * 255)})`;
 
 			const text = document.createElement("span");
 			text.textContent = item.label;

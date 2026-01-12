@@ -12,7 +12,7 @@ def _():
     import numpy as np
     import pandas
 
-    num_points = 100
+    num_points = 100000
 
     point_ids = [f"id_{i}" for i in range(1, num_points + 1)]
     points = np.random.randn(num_points, 3)

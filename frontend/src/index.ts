@@ -194,7 +194,7 @@ export function buildWidget(
 	legendHost.dataset.testid = "legend-host";
 	toolbar.appendChild(legendHost);
 
-	const legendView = createLegendView(legendHost);
+	const legendView = createLegendView(legendHost, DEFAULT_UI_CONFIG);
 	const legendController = createLegendController({
 		model: dbgModel,
 		view: legendView,

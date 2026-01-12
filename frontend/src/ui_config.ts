@@ -14,6 +14,15 @@ export type UiConfig = {
 		removeActiveBg: string;
 		removeActiveText: string;
 	};
+	legend: {
+		rowPadding: string;
+		rowBorderRadiusPx: number;
+		rowGapPx: number;
+		activeRowBg: string;
+		hoverRowBg: string;
+		textColor: string;
+		font: string;
+	};
 	messages: {
 		marginLeftPx: number;
 		fontSizePx: number;
@@ -34,6 +43,15 @@ export const DEFAULT_UI_CONFIG: UiConfig = {
 		inactiveText: "#111827",
 		removeActiveBg: "#dc2626",
 		removeActiveText: "#ffffff",
+	},
+	legend: {
+		rowPadding: "4px 6px",
+		rowBorderRadiusPx: 6,
+		rowGapPx: 6,
+		activeRowBg: "rgba(0, 0, 0, 0.06)",
+		hoverRowBg: "rgba(0, 0, 0, 0.04)",
+		textColor: "#111827",
+		font: "system-ui, sans-serif",
 	},
 	messages: {
 		marginLeftPx: 8,
