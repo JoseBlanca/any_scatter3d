@@ -1,0 +1,18 @@
+Rule remainder:
+- We want to create professional grade software.
+- Do not write spaghetti code
+- Do not create or change the user facing UI or UX without before asking what to do
+- In general, do not offer several possibilities, chose the most professional, robust and reliable option.
+- If you need any code file to diagnose a problem or to propose an edit, ask for it, do not try to guess.
+- When you suggest a code edit, always say in which file and exactly where in the file if you do not do the edit of the whole file yourself.
+- Do not try to fix possible errors with default values, errors should not never pass silently.
+- Do not try to fix any bug or wrong application behavior before being sure of the cause. First diagnose.
+- Do not try to fix any bug before creating a test that triggers the bug or, at least, checks the cause. Once we have the test, we fix the bug. We don't want the bug to reappear in the future.
+- We can create some mocks for the tests, but they should be minimal, we don't want to end up with two parallel code bases, the real one and the test one with parallel behaviors, we want the tests to test, mainly, the real code not the mocks.
+- Do not suggest many steps to do, I can only do one at a time, so suggest one or at most two or three.
+- Debug code should never crash in production, when no debug tag is active, add the necessary guards.
+- When we are designing code we have to take into account that, in general, we want to test, at least, the user facing functionalities
+- As a general recommendation collect the code for any widget, element or componen in its own file, respecting the controller view separation.
+- There should be only one source of truth.
+- learning about the code and refactoring to have higher quality code is productive.
+- Refuse to guess, diagnose before trying to fix any problem. If you need some file, ask for it.
