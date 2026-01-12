@@ -78,8 +78,16 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 	bar.rotateBtn.addEventListener(
 		"click",
 		() => {
+			clearMessage();
+
+			// Keep Python authoritative: set the trait.
 			model.set(TRAITS.interactionMode, "rotate");
 			model.save_changes();
+
+			// Update local UI/state immediately (do not wait on model observers).
+			setMode(state, { kind: "rotate" });
+			syncUiFromState();
+			root.focus();
 		},
 		{ signal },
 	);

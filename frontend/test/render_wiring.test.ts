@@ -167,4 +167,48 @@ describe("buildWidget wiring", () => {
 
 		h.cleanup();
 	});
+	it("switches back to rotate when rotate button is clicked after entering lasso", () => {
+		const el = document.createElement("div");
+		document.body.appendChild(el);
+
+		const model = new FakeModel();
+
+		// minimal trait state
+		model.set("labels_t", []);
+		model.set("colors_t", []);
+		model.set("active_category_t", "");
+		model.set("interaction_mode_t", "rotate");
+		model.set("legend_side_t", "right");
+		model.set("legend_dock_t", "top");
+
+		// make lasso button not early-return
+		model.set("interactive_ready_t", true);
+
+		const h = buildWidget(model as any, el);
+
+		const buttons = Array.from(h.root.querySelectorAll("button"));
+		const rotateBtn = buttons.find((b) => b.textContent === "Rotate");
+		const lassoBtn = buttons.find((b) => b.textContent === "Lasso");
+		const addBtn = buttons.find((b) => b.textContent === "Add");
+		const removeBtn = buttons.find((b) => b.textContent === "Remove");
+
+		expect(rotateBtn).toBeTruthy();
+		expect(lassoBtn).toBeTruthy();
+		expect(addBtn).toBeTruthy();
+		expect(removeBtn).toBeTruthy();
+
+		// enter lasso => add/remove visible
+		lassoBtn!.click();
+		expect(addBtn!.style.display).not.toBe("none");
+		expect(removeBtn!.style.display).not.toBe("none");
+
+		// BUG: currently this does not update UI back to rotate
+		rotateBtn!.click();
+
+		// expected: add/remove hidden again
+		expect(addBtn!.style.display).toBe("none");
+		expect(removeBtn!.style.display).toBe("none");
+
+		h.cleanup();
+	});
 });
