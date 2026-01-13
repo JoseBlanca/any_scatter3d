@@ -1,5 +1,3 @@
-import base64
-
 import numpy
 import pandas
 import pytest
@@ -111,7 +109,7 @@ def test_lasso_add_with_packed_bitmask():
 
     # select indices [1,2]
     mask_bytes = pack_mask_big([1, 2], n=4)
-    w.lasso_mask_t = base64.b64encode(mask_bytes).decode("ascii")
+    w.lasso_mask_t = mask_bytes
 
     w.lasso_request_t = {
         "kind": "lasso_commit",
@@ -135,7 +133,7 @@ def test_lasso_remove_with_packed_bitmask_only_removes_target_label():
 
     # select indices [0,1,3] and remove Spain
     mask_bytes = pack_mask_big([0, 1, 3], n=4)
-    w.lasso_mask_t = base64.b64encode(mask_bytes).decode("ascii")
+    w.lasso_mask_t = mask_bytes
 
     w.lasso_request_t = {
         "kind": "lasso_commit",
@@ -182,7 +180,7 @@ def test_lasso_unknown_label_errors_and_state_unchanged():
     before = decode_u16(w.coded_values_t).copy()
 
     mask_bytes = pack_mask_big([0, 1], n=4)
-    w.lasso_mask_t = base64.b64encode(mask_bytes).decode("ascii")
+    w.lasso_mask_t = mask_bytes
 
     w.lasso_request_t = {
         "kind": "lasso_commit",
@@ -202,7 +200,7 @@ def test_entering_lasso_selects_first_label():
     w = Scatter3dWidget(xyz=xyz, category=cat)
 
     assert w.interaction_mode_t == "rotate"
-    assert w.active_category_t == ""
+    assert w.active_category_t is None
 
     w.interaction_mode_t = "lasso"
     assert w.active_category_t == "a"
@@ -217,7 +215,7 @@ def test_cannot_clear_active_category_in_lasso_mode():
     assert w.active_category_t in ("a", "b")
 
     with pytest.raises(traitlets.TraitError):
-        w.active_category_t = ""
+        w.active_category_t = None
 
 
 def test_can_clear_active_category_in_rotate_mode():
@@ -230,8 +228,8 @@ def test_can_clear_active_category_in_rotate_mode():
 
     # Set a valid active category, then clear it: must be allowed in rotate mode.
     w.active_category_t = "a"
-    w.active_category_t = ""
-    assert w.active_category_t == ""
+    w.active_category_t = None
+    assert w.active_category_t is None
 
 
 def test_zero_point_category_is_present_and_selectable():
