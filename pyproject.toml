@@ -6,6 +6,14 @@ readme = "README.md"
 requires-python = ">=3.13"
 license = { text = "MIT" }
 dependencies = ["anywidget>=0.9.21", "narwhals>=2.14.0", "numpy>=2.3.5"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
 
 [build-system]
 requires = ["uv_build"]
@@ -16,3 +24,8 @@ module-name = "scatter3d"
 
 [dependency-groups]
 dev = ["marimo>=0.18.4", "pandas>=2.3.3", "polars>=1.36.1", "pytest>=9.0.2"]
+
+[project.urls]
+Homepage = "https://github.com/JoseBlanca/any_scatter3d"
+Repository = "https://github.com/JoseBlanca/any_scatter3d"
+Issues = "https://github.com/JoseBlanca/any_scatter3d/issues"
