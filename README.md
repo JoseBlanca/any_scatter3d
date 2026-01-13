@@ -94,6 +94,10 @@ print(species.values.value_counts())
 print(species.num_unassigned)
 ```
 
+## Interactive operation
+
+The widget is fully interactive and designed for exploratory annotation workflows. Users can rotate, pan, and zoom the 3D point cloud directly with the mouse. A lasso tool allows drawing a free-form polygon in screen space to select subsets of points. Once a lasso selection is completed, the selection can be applied to the active category using add or remove operations, updating both the visual state and the underlying Python Category object. All interactions are bidirectionally synchronized: changes made via the UI are immediately reflected in Python, and programmatic updates from Python are propagated back to the frontend. This enables tight interactive loops where visual inspection, manual selection, and scripted analysis coexist seamlessly.
+
 ## Concepts
 
 ### `Scatter3dWidget`
