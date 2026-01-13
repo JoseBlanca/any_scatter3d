@@ -46,6 +46,14 @@ def run_cmd(cmd, cwd=None):
         raise
 
 
+def clean_dist(project_dir: Path) -> None:
+    dist_dir = project_dir / "dist"
+    if dist_dir.exists():
+        shutil.rmtree(dist_dir)
+    dist_dir.mkdir()
+    print("dist/ cleaned")
+
+
 def check_python_tests(dir):
     cmd = ["uv", "run", "pytest", str(dir)]
     run_cmd(cmd)
@@ -187,6 +195,7 @@ def check_sourcemap_paths(map_path: Path) -> None:
     print("Ts source map seem OK")
 
 
+clean_dist(PROJECT_DIR)
 check_python_tests(PYTHON_TEST_DIR)
 check_ts_tests(TS_PROJECT_DIR)
 clean_caches_in_python_src(PYTHON_SRC_PACKAGE_DIR)
