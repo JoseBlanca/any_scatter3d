@@ -51,9 +51,9 @@ export function buildSizeBuffer(params: BuildSizeBufferParams): Float32Array {
 	for (let i = 0; i < codes.length; i++) {
 		const code = codes[i] ?? 0;
 
-		// Keep missing points at base size (consistent, and avoids "invisible missing").
-		// If you want missing to shrink too, we can change it, but it must be specified.
-		const isInactive = code !== 0 && code !== activeCode;
+		// When an active category exists, everything that is not that category
+		// is considered inactive, including unassigned (code 0).
+		const isInactive = code !== activeCode;
 		out[i] = isInactive ? baseSize * inactiveScale : baseSize;
 	}
 
