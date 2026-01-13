@@ -594,8 +594,13 @@ class Scatter3dWidget(anywidget.AnyWidget):
     @traitlets.observe("active_category_t")
     def _on_active_category_t(self, change) -> None:
         if self.interaction_mode_t == "lasso" and change.get("new") is None:
-            # should be prevented by validator, but keep as belt-and-suspenders
-            self._ensure_active_category_invariants()
+            # NOTE: traitlets bypasses @validate(...) when allow_none=True.
+            # In lasso mode, clearing is a hard error (no silent fallback).
+            old = change.get("old")
+            if old is not None:
+                # restore previous valid value to keep state consistent
+                self.set_trait("active_category_t", old)
+            raise traitlets.TraitError("active_category_t cannot be None in lasso mode")
 
     @traitlets.observe("labels_t")
     def _on_labels_t(self, change) -> None:
