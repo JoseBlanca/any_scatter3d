@@ -30,7 +30,8 @@ export function pointerInfoFromEvent(
 export function createWidgetRoot(el: HTMLElement) {
 	el.innerHTML = "";
 	el.style.height = "100%";
-	el.style.minHeight = MIN_WIDGET_HEIGHT;
+	el.style.minHeight = "0";
+	el.style.overflow = "hidden";
 
 	const root = document.createElement("div");
 	root.style.display = "flex";
@@ -39,8 +40,10 @@ export function createWidgetRoot(el: HTMLElement) {
 	root.style.padding = "12px";
 	root.style.fontFamily = "system-ui, sans-serif";
 	root.style.height = "100%";
-	root.style.minHeight = MIN_WIDGET_HEIGHT;
-	root.style.boxSizing = "border-box"; // padding counted inside height
+
+	root.style.minHeight = "0";
+	root.style.boxSizing = "border-box";
+	root.style.overflow = "hidden";
 
 	root.tabIndex = 0;
 
@@ -55,10 +58,11 @@ export function createWidgetRoot(el: HTMLElement) {
 	canvasHost.style.border = "1px solid #ddd";
 	canvasHost.style.borderRadius = "8px";
 	canvasHost.style.flex = "1 1 auto";
-	canvasHost.style.minHeight = MIN_PLOT_HEIGHT;
 	canvasHost.style.minWidth = "0";
 	canvasHost.style.position = "relative";
 	canvasHost.style.overflow = "hidden";
+
+	canvasHost.style.minHeight = "0";
 
 	const tooltip = document.createElement("div");
 	tooltip.style.position = "absolute";

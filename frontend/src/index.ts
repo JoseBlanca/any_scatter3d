@@ -16,6 +16,7 @@ import { createLegendController } from "./legend_controller";
 import { makeDebugModel } from "./model_debug";
 import type { ResizeCanvasFn } from "./resize_controller";
 import { createTransportReadyController } from "./transport_ready";
+import { createHeightController } from "./height_controller";
 
 export type WidgetHandles = {
 	cleanup: () => void;
@@ -33,6 +34,19 @@ export type WidgetHandles = {
 		stateSize: { dpr: number; pixelWidth: number; pixelHeight: number };
 	};
 };
+
+function isInMarimoOutputArea(el: HTMLElement): boolean {
+	// In marimo, the widget is typically rendered inside a ShadowRoot.
+	// closest() does not cross the shadow boundary, so we must check from
+	// the shadow host when present.
+	const rootNode = el.getRootNode?.();
+	const searchStart =
+		rootNode && (rootNode as any).host instanceof HTMLElement
+			? ((rootNode as any).host as HTMLElement)
+			: el;
+
+	return Boolean(searchStart.closest?.('[data-cell-role="output"]'));
+}
 
 function bindAndRecordPointer(
 	debug: WidgetHandles["debug"],
@@ -297,6 +311,26 @@ export function buildWidget(
 		resizeCanvas: resizeCanvasWithDebug,
 	});
 
+	// Height clamp to marimo output allocation (prevents scrollbars).
+	let heightController: { applyNow: () => void; dispose: () => void } | null =
+		null;
+
+	if (isInMarimoOutputArea(el)) {
+		heightController = createHeightController({
+			hostEl: el,
+			rootEl: root,
+			desiredPx: 800, // temporary TS-side constant; will become a traitlet
+			onApplied: () => {
+				// Height changes must immediately propagate to canvas sizing.
+				resizeController.applyNow();
+			},
+		});
+
+		// Best-effort initial apply; if allocation isn't measurable yet, controller is a no-op
+		// and will apply on subsequent ResizeObserver callbacks.
+		heightController.applyNow();
+	}
+
 	const forceResize = () => {
 		resizeController.applyNow();
 		debug.stateSize = {
@@ -391,6 +425,7 @@ export function buildWidget(
 		modelBindings.dispose();
 		interactionController.dispose();
 		tooltipController.dispose();
+		heightController?.dispose();
 		resizeController.dispose();
 		three.dispose();
 		transport.dispose();

@@ -35,14 +35,93 @@ if (!globalThis.cancelAnimationFrame) {
 	};
 }
 
-// Optional: if some code reads ResizeObserver, stub it (common in resize controllers).
-if (!(globalThis as any).ResizeObserver) {
-	(globalThis as any).ResizeObserver = class ResizeObserver {
-		observe() {}
-		unobserve() {}
-		disconnect() {}
-	};
+// JSDOM doesn't implement ResizeObserver.
+// Provide a minimal controllable mock that lets tests trigger resize events deterministically.
+//
+// Design goals:
+// - minimal surface area (observe/unobserve/disconnect)
+// - no DOM layout simulation
+// - tests remain in control by calling __triggerResize()
+type ROEntry = { target: Element; contentRect: DOMRectReadOnly };
+
+type ROCallback = (entries: ROEntry[]) => void;
+
+class TestResizeObserver {
+	private cb: ROCallback;
+	private observed = new Set<Element>();
+
+	constructor(cb: ROCallback) {
+		this.cb = cb;
+		(TestResizeObserver as any).__instances.add(this);
+	}
+
+	observe(target: Element) {
+		this.observed.add(target);
+	}
+
+	unobserve(target: Element) {
+		this.observed.delete(target);
+	}
+
+	disconnect() {
+		this.observed.clear();
+		(TestResizeObserver as any).__instances.delete(this);
+	}
+
+	// internal: invoked by global trigger
+	__notify(target: Element) {
+		if (!this.observed.has(target)) return;
+
+		// Use getBoundingClientRect as a proxy for size in tests.
+		const r = (target as HTMLElement).getBoundingClientRect?.();
+		const width = r?.width ?? 0;
+		const height = r?.height ?? 0;
+
+		const entry: ROEntry = {
+			target,
+			contentRect: {
+				x: 0,
+				y: 0,
+				top: 0,
+				left: 0,
+				right: width,
+				bottom: height,
+				width,
+				height,
+				toJSON() {
+					return {
+						x: 0,
+						y: 0,
+						width,
+						height,
+						top: 0,
+						left: 0,
+						right: width,
+						bottom: height,
+					};
+				},
+			} as unknown as DOMRectReadOnly,
+		};
+
+		this.cb([entry]);
+	}
+
+	static __instances: Set<TestResizeObserver> = new Set();
 }
+
+// Install if missing
+if (!(globalThis as any).ResizeObserver) {
+	(globalThis as any).ResizeObserver = TestResizeObserver as any;
+}
+
+// Test helper: trigger resize observers for a given element.
+// This is intentionally not typed as public API; it’s a test-only hook.
+(globalThis as any).__triggerResize = (target: Element) => {
+	for (const ro of (TestResizeObserver as any)
+		.__instances as Set<TestResizeObserver>) {
+		ro.__notify(target);
+	}
+};
 
 // Optional: OrbitControls / three.js sometimes inspects WebGL context.
 // If createThreeScene tries to create a WebGLRenderer, you may need to mock it instead.
