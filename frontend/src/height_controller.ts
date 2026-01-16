@@ -99,10 +99,21 @@ function findConstraintElement(hostEl: HTMLElement): HTMLElement | null {
 
 	const candidates = [outputArea, inner].filter(Boolean) as HTMLElement[];
 
+	let bestEl: HTMLElement | null = null;
+	let bestMax: number | null = null;
+
 	for (const el of candidates) {
 		const mh = getMaxHeightPx(el);
-		if (mh != null) return el;
+		if (mh == null) continue;
+
+		// Choose the most constraining max-height (smallest).
+		if (bestMax == null || mh < bestMax) {
+			bestMax = mh;
+			bestEl = el;
+		}
 	}
+
+	if (bestEl) return bestEl;
 
 	// If no max-height constraint is found, fall back to outputArea as the place where
 	// fullscreen classes/styles are applied.

@@ -1,56 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-
-// This module does not exist yet — we'll create it next.
-// The test will fail until implemented.
 import { createHeightController } from "../src/height_controller";
-
-function setRect(el: HTMLElement, w: number, h: number) {
-	// JSDOM doesn't compute layout; we control it.
-	(el as any).getBoundingClientRect = () => ({
-		x: 0,
-		y: 0,
-		top: 0,
-		left: 0,
-		right: w,
-		bottom: h,
-		width: w,
-		height: h,
-		toJSON() {
-			return {
-				x: 0,
-				y: 0,
-				width: w,
-				height: h,
-				top: 0,
-				left: 0,
-				right: w,
-				bottom: h,
-			};
-		},
-	});
-}
 
 describe("height_controller", () => {
 	beforeEach(() => {
 		document.body.innerHTML = "";
 	});
 
-	it("clamps root height to allocated output height; updates on resize", () => {
-		// Simulate marimo output container
-		const output = document.createElement("div");
-		output.dataset.cellRole = "output";
-		document.body.appendChild(output);
+	it("uses desiredPx when no max-height constraint is found", () => {
+		const outputArea = document.createElement("div");
+		outputArea.dataset.cellRole = "output";
+		document.body.appendChild(outputArea);
 
-		// Simulate anywidget host inside output
 		const host = document.createElement("div");
-		output.appendChild(host);
+		outputArea.appendChild(host);
 
-		// Widget root that we will size
 		const root = document.createElement("div");
 		host.appendChild(root);
-
-		// Initial allocation is small
-		setRect(output, 1000, 500);
 
 		const onApplied = vi.fn();
 		const ctrl = createHeightController({
@@ -60,93 +25,104 @@ describe("height_controller", () => {
 			onApplied,
 		});
 
-		// First apply clamps to 500 (minus any internal fudge is NOT allowed here;
-		// we want exact clamping at this layer).
 		ctrl.applyNow();
-		expect(root.style.height).toBe("500px");
-		expect(onApplied).toHaveBeenCalledTimes(1);
-
-		// Simulate fullscreen allocation increase
-		setRect(output, 1000, 1200);
-
-		// Trigger ResizeObserver delivery (test helper installed in setup.ts)
-		(globalThis as any).__triggerResize(output);
-
-		expect(root.style.height).toBe("800px"); // desired fits now
-		expect(onApplied).toHaveBeenCalledTimes(2);
+		expect(root.style.height).toBe("800px");
+		expect(onApplied).toHaveBeenCalledWith(800);
 
 		ctrl.dispose();
 	});
 
-	it("works when hostEl is inside a ShadowRoot (closest must be applied on the shadow host)", () => {
-		// marimo output container
-		const output = document.createElement("div");
-		output.dataset.cellRole = "output";
-		document.body.appendChild(output);
+	it("clamps to max-height budget minus vertical overhead (padding + borders)", () => {
+		const outputArea = document.createElement("div");
+		outputArea.dataset.cellRole = "output";
+		document.body.appendChild(outputArea);
 
-		// <marimo-anywidget> host (light DOM)
-		const anywidgetHost = document.createElement("marimo-anywidget");
-		output.appendChild(anywidgetHost);
+		// This is the constraint we expect to clamp to.
+		outputArea.style.maxHeight = "500px";
+		// Overhead = 10 + 6 + 2 + 2 = 20 => budget 480
+		outputArea.style.paddingTop = "10px";
+		outputArea.style.paddingBottom = "6px";
+		outputArea.style.borderTopWidth = "2px";
+		outputArea.style.borderBottomWidth = "2px";
 
-		// shadow root (where render(el=...) happens)
-		const shadow = anywidgetHost.attachShadow({ mode: "open" });
+		const host = document.createElement("div");
+		outputArea.appendChild(host);
 
-		const hostEl = document.createElement("div");
-		const rootEl = document.createElement("div");
-		hostEl.appendChild(rootEl);
-		shadow.appendChild(hostEl);
-
-		// Initial allocated size
-		setRect(output, 1000, 500);
+		const root = document.createElement("div");
+		host.appendChild(root);
 
 		const onApplied = vi.fn();
 		const ctrl = createHeightController({
-			hostEl,
-			rootEl,
+			hostEl: host,
+			rootEl: root,
 			desiredPx: 800,
 			onApplied,
 		});
 
 		ctrl.applyNow();
-		expect(rootEl.style.height).toBe("500px");
-		expect(onApplied).toHaveBeenCalledTimes(1);
-
-		// Simulate fullscreen allocation increase
-		setRect(output, 1000, 1200);
-		(globalThis as any).__triggerResize(output);
-
-		expect(rootEl.style.height).toBe("800px");
-		expect(onApplied).toHaveBeenCalledTimes(2);
+		expect(root.style.height).toBe("480px");
+		expect(onApplied).toHaveBeenCalledWith(480);
 
 		ctrl.dispose();
 	});
-	it("clamps to the inner .output wrapper when present (marimo scroll container)", () => {
+
+	it("updates on ResizeObserver delivery for the chosen constraint element", () => {
 		const outputArea = document.createElement("div");
 		outputArea.dataset.cellRole = "output";
 		document.body.appendChild(outputArea);
 
-		// This is the element that typically has overflow/max-height in marimo
+		outputArea.style.maxHeight = "500px";
+
+		const host = document.createElement("div");
+		outputArea.appendChild(host);
+
+		const root = document.createElement("div");
+		host.appendChild(root);
+
+		const onApplied = vi.fn();
+		const ctrl = createHeightController({
+			hostEl: host,
+			rootEl: root,
+			desiredPx: 800,
+			onApplied,
+		});
+
+		ctrl.applyNow();
+		expect(root.style.height).toBe("500px");
+
+		// Increase max-height and trigger the ResizeObserver hook installed in setup.ts.
+		outputArea.style.maxHeight = "1200px";
+		(globalThis as any).__triggerResize(outputArea);
+
+		expect(root.style.height).toBe("800px");
+		expect(onApplied).toHaveBeenCalledTimes(2);
+
+		ctrl.dispose();
+	});
+
+	it("prefers the element that actually carries a max-height constraint (inner .output wrapper vs output area)", () => {
+		const outputArea = document.createElement("div");
+		outputArea.dataset.cellRole = "output";
+		document.body.appendChild(outputArea);
+
+		// Big output area, but not constrained
+		outputArea.style.maxHeight = "1200px";
+
 		const outputWrapper = document.createElement("div");
 		outputWrapper.className = "output block";
 		outputArea.appendChild(outputWrapper);
 
-		// anywidget host (light DOM)
+		// Wrapper is the real scroll/constraint container
+		outputWrapper.style.maxHeight = "400px";
+
 		const anywidgetHost = document.createElement("marimo-anywidget");
 		outputWrapper.appendChild(anywidgetHost);
 
-		// shadow root (where render(el=...) happens)
 		const shadow = anywidgetHost.attachShadow({ mode: "open" });
-
 		const hostEl = document.createElement("div");
 		const rootEl = document.createElement("div");
 		hostEl.appendChild(rootEl);
 		shadow.appendChild(hostEl);
-
-		// output-area might be big…
-		setRect(outputArea, 1000, 900);
-
-		// …but the wrapper is what actually allocates visible height (small => scrollbar)
-		setRect(outputWrapper, 1000, 400);
 
 		const ctrl = createHeightController({
 			hostEl,
@@ -158,8 +134,7 @@ describe("height_controller", () => {
 		ctrl.applyNow();
 		expect(rootEl.style.height).toBe("400px");
 
-		// fullscreen / expand: wrapper grows
-		setRect(outputWrapper, 1000, 1200);
+		outputWrapper.style.maxHeight = "900px";
 		(globalThis as any).__triggerResize(outputWrapper);
 
 		expect(rootEl.style.height).toBe("800px");
@@ -167,45 +142,57 @@ describe("height_controller", () => {
 		ctrl.dispose();
 	});
 
-	it("does nothing until allocation is measurable (>0)", () => {
-		const output = document.createElement("div");
-		output.dataset.cellRole = "output";
-		document.body.appendChild(output);
+	it("works when hostEl is inside a ShadowRoot (closest must be applied on the shadow host)", () => {
+		const outputArea = document.createElement("div");
+		outputArea.dataset.cellRole = "output";
+		document.body.appendChild(outputArea);
 
-		const host = document.createElement("div");
-		output.appendChild(host);
+		// Put the constraint on the output area (common case).
+		outputArea.style.maxHeight = "500px";
 
-		const root = document.createElement("div");
-		host.appendChild(root);
+		const anywidgetHost = document.createElement("marimo-anywidget");
+		outputArea.appendChild(anywidgetHost);
 
-		// Not measurable yet
-		setRect(output, 1000, 0);
+		const shadow = anywidgetHost.attachShadow({ mode: "open" });
 
+		const hostEl = document.createElement("div");
+		const rootEl = document.createElement("div");
+		hostEl.appendChild(rootEl);
+		shadow.appendChild(hostEl);
+
+		const onApplied = vi.fn();
 		const ctrl = createHeightController({
-			hostEl: host,
-			rootEl: root,
+			hostEl,
+			rootEl,
 			desiredPx: 800,
-			onApplied: vi.fn(),
+			onApplied,
 		});
 
 		ctrl.applyNow();
-		expect(root.style.height).toBe("");
+		expect(rootEl.style.height).toBe("500px");
+		expect(onApplied).toHaveBeenCalledWith(500);
+
+		outputArea.style.maxHeight = "1200px";
+		(globalThis as any).__triggerResize(outputArea);
+
+		expect(rootEl.style.height).toBe("800px");
+		expect(onApplied).toHaveBeenCalledTimes(2);
 
 		ctrl.dispose();
 	});
 
-	it("rejects invalid desired heights", () => {
-		const output = document.createElement("div");
-		output.dataset.cellRole = "output";
-		document.body.appendChild(output);
+	it("rejects invalid desired heights (eager validation)", () => {
+		const outputArea = document.createElement("div");
+		outputArea.dataset.cellRole = "output";
+		document.body.appendChild(outputArea);
+
+		outputArea.style.maxHeight = "500px";
 
 		const host = document.createElement("div");
-		output.appendChild(host);
+		outputArea.appendChild(host);
 
 		const root = document.createElement("div");
 		host.appendChild(root);
-
-		setRect(output, 1000, 500);
 
 		expect(() =>
 			createHeightController({

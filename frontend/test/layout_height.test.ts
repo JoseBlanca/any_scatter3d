@@ -1,29 +1,34 @@
 import { describe, it, expect } from "vitest";
 import { computeEffectiveHeightPx } from "../src/layout_height";
 
-describe("computeEffectiveHeightPx", () => {
-	it("subtracts overhead inside maxAllowedPx budget (prevents container padding overflow)", () => {
-		// Your real numbers:
-		// maxAllowedPx = 610
-		// paddingTop + paddingBottom ~= 28.8
-		// usable inner height ~= 581.2
-		const next = computeEffectiveHeightPx({
-			desiredPx: 800,
-			maxAllowedPx: 610,
-			overheadPx: 28.8,
-		});
-
-		// We want root height to fit *inside* the max-height budget
-		// after accounting for container overhead.
-		expect(next).toBeCloseTo(581.2, 3);
+describe("layout_height.computeEffectiveHeightPx", () => {
+	it("returns desiredPx when maxAllowedPx is null", () => {
+		expect(
+			computeEffectiveHeightPx({
+				desiredPx: 800,
+				maxAllowedPx: null,
+				overheadPx: 0,
+			}),
+		).toBe(800);
 	});
 
-	it("keeps legacy behavior when overheadPx=0", () => {
-		const next = computeEffectiveHeightPx({
-			desiredPx: 800,
-			maxAllowedPx: 610,
-			overheadPx: 0,
-		});
-		expect(next).toBe(610);
+	it("returns min(desiredPx, maxAllowedPx - overheadPx) when maxAllowedPx is provided", () => {
+		expect(
+			computeEffectiveHeightPx({
+				desiredPx: 800,
+				maxAllowedPx: 500,
+				overheadPx: 20,
+			}),
+		).toBe(480);
+	});
+
+	it("throws when maxAllowedPx - overheadPx is not > 0", () => {
+		expect(() =>
+			computeEffectiveHeightPx({
+				desiredPx: 800,
+				maxAllowedPx: 10,
+				overheadPx: 10,
+			}),
+		).toThrow();
 	});
 });
