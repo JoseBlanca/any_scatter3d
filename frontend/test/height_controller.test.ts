@@ -18,10 +18,11 @@ describe("height_controller", () => {
 		host.appendChild(root);
 
 		const onApplied = vi.fn();
+		let desiredPx = 800;
 		const ctrl = createHeightController({
 			hostEl: host,
 			rootEl: root,
-			desiredPx: 800,
+			getDesiredPx: () => desiredPx,
 			onApplied,
 		});
 
@@ -52,10 +53,11 @@ describe("height_controller", () => {
 		host.appendChild(root);
 
 		const onApplied = vi.fn();
+		let desiredPx = 800;
 		const ctrl = createHeightController({
 			hostEl: host,
 			rootEl: root,
-			desiredPx: 800,
+			getDesiredPx: () => desiredPx,
 			onApplied,
 		});
 
@@ -80,10 +82,11 @@ describe("height_controller", () => {
 		host.appendChild(root);
 
 		const onApplied = vi.fn();
+		let desiredPx = 800;
 		const ctrl = createHeightController({
 			hostEl: host,
 			rootEl: root,
-			desiredPx: 800,
+			getDesiredPx: () => desiredPx,
 			onApplied,
 		});
 
@@ -124,10 +127,11 @@ describe("height_controller", () => {
 		hostEl.appendChild(rootEl);
 		shadow.appendChild(hostEl);
 
+		let desiredPx = 800;
 		const ctrl = createHeightController({
 			hostEl,
 			rootEl,
-			desiredPx: 800,
+			getDesiredPx: () => desiredPx,
 			onApplied: vi.fn(),
 		});
 
@@ -161,10 +165,11 @@ describe("height_controller", () => {
 		shadow.appendChild(hostEl);
 
 		const onApplied = vi.fn();
+		let desiredPx = 800;
 		const ctrl = createHeightController({
 			hostEl,
 			rootEl,
-			desiredPx: 800,
+			getDesiredPx: () => desiredPx,
 			onApplied,
 		});
 
@@ -198,9 +203,9 @@ describe("height_controller", () => {
 			createHeightController({
 				hostEl: host,
 				rootEl: root,
-				desiredPx: 0,
+				getDesiredPx: () => 0,
 				onApplied: vi.fn(),
 			}),
-		).toThrow();
+		).toThrow(/desiredPx must be > 0/);
 	});
 });

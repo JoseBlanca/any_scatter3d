@@ -1,4 +1,7 @@
 export type UiConfig = {
+	widget: {
+		defaultHeightPx: number;
+	};
 	controlBar: {
 		gapPx: number;
 	};
@@ -42,6 +45,9 @@ export type UiConfig = {
 };
 
 export const DEFAULT_UI_CONFIG: UiConfig = {
+	widget: {
+		defaultHeightPx: 600,
+	},
 	controlBar: { gapPx: 12 },
 	buttons: {
 		padding: "6px 10px",

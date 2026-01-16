@@ -14,7 +14,8 @@ export type HeightControllerDeps = {
 	rootEl: HTMLElement;
 
 	// desired height in CSS px; must be finite and > 0
-	desiredPx: number;
+	// Must be stable (no side effects); called inside applyNow().
+	getDesiredPx: () => number;
 
 	// optional hook for integration tests / wiring
 	onApplied?: (heightPx: number) => void;
@@ -123,18 +124,24 @@ function findConstraintElement(hostEl: HTMLElement): HTMLElement | null {
 export function createHeightController(
 	deps: HeightControllerDeps,
 ): HeightController {
-	const { hostEl, rootEl, desiredPx, onApplied } = deps;
+	const { hostEl, rootEl, getDesiredPx, onApplied } = deps;
 
-	// Validate eagerly so callers/tests get deterministic failures at construction time.
-	if (!(typeof desiredPx === "number" && Number.isFinite(desiredPx))) {
-		throw new Error(
-			`height_controller: desiredPx must be finite number, got ${desiredPx}`,
-		);
+	if (typeof getDesiredPx !== "function") {
+		throw new Error(`height_controller: getDesiredPx must be a function`);
 	}
-	if (desiredPx <= 0) {
-		throw new Error(
-			`height_controller: desiredPx must be > 0, got ${desiredPx}`,
-		);
+	// Validate eagerly once (deterministic startup failures).
+	{
+		const desiredPx = getDesiredPx();
+		if (!(typeof desiredPx === "number" && Number.isFinite(desiredPx))) {
+			throw new Error(
+				`height_controller: desiredPx must be finite number, got ${desiredPx}`,
+			);
+		}
+		if (desiredPx <= 0) {
+			throw new Error(
+				`height_controller: desiredPx must be > 0, got ${desiredPx}`,
+			);
+		}
 	}
 
 	const constraintElMaybe = findConstraintElement(hostEl);
@@ -171,6 +178,19 @@ export function createHeightController(
 		// This avoids unnecessary computed-style parsing (and avoids jsdom "" issues when max-height is none).
 		const overheadPx =
 			maxAllowedPx === null ? 0 : getVerticalOverheadPx(constraintEl);
+
+		const desiredPx = getDesiredPx();
+		if (
+			!(
+				typeof desiredPx === "number" &&
+				Number.isFinite(desiredPx) &&
+				desiredPx > 0
+			)
+		) {
+			throw new Error(
+				`height_controller: desiredPx must be finite number > 0, got ${desiredPx}`,
+			);
+		}
 
 		const next = computeEffectiveHeightPx({
 			desiredPx,

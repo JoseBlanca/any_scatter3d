@@ -26,6 +26,8 @@ export const TRAITS = {
 	activeCategory: "active_category_t",
 	legendSide: "legend_side_t",
 	legendDock: "legend_dock_t",
+
+	widgetHeightPx: "widget_height_px_t",
 } as const;
 
 export type TraitKey = (typeof TRAITS)[keyof typeof TRAITS];
@@ -107,6 +109,8 @@ export type TraitValueMap = {
 
 	[TRAITS.legendSide]: "left" | "right" | null | undefined;
 	[TRAITS.legendDock]: "top" | "bottom" | null | undefined;
+
+	[TRAITS.widgetHeightPx]: number | null | undefined;
 };
 
 // 4) Typed model interface ======================================================

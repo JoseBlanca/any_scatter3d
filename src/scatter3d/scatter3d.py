@@ -489,6 +489,12 @@ class Scatter3dWidget(anywidget.AnyWidget):
         help="Legend dock: 'top' or 'bottom'.",
     ).tag(sync=True)
 
+    # Widget height in CSS pixels (desired height).
+    widget_height_px_t = traitlets.Float(
+        default_value=600.0,
+        help="Desired widget height in CSS pixels. Frontend will clamp to notebook constraints.",
+    ).tag(sync=True)
+
     def __init__(
         self,
         xyz: numpy.ndarray,
@@ -531,6 +537,24 @@ class Scatter3dWidget(anywidget.AnyWidget):
 
         # Enforce initial invariants (rotate default allows empty active category)
         self._ensure_active_category_invariants()
+
+    @traitlets.validate("widget_height_px_t")
+    def _validate_widget_height_px_t(self, proposal):
+        v = float(proposal["value"])
+        if not numpy.isfinite(v) or v <= 0:
+            raise traitlets.TraitError("widget_height_px_t must be a finite number > 0")
+        return v
+
+    def _get_height(self) -> float:
+        return float(self.widget_height_px_t)
+
+    def _set_height(self, value: float) -> None:
+        v = float(value)
+        if not numpy.isfinite(v) or v <= 0:
+            raise ValueError("height must be a finite number > 0")
+        self.widget_height_px_t = v
+
+    height = property(_get_height, _set_height)
 
     @traitlets.validate("interaction_mode_t")
     def _validate_interaction_mode_t(self, proposal):

@@ -1,5 +1,5 @@
 import type { WidgetModel } from "./model";
-import { TRAITS } from "./model";
+import { TRAITS, changeEvent } from "./model";
 import { createWidgetRoot, createOverlayCanvas, get2dContext } from "./view";
 import { createInteractionState, drawOverlay, setMode } from "./interaction";
 import { DEFAULT_UI_CONFIG } from "./ui_config";
@@ -316,19 +316,49 @@ export function buildWidget(
 		null;
 
 	if (isInMarimoOutputArea(el)) {
+		function getDesiredHeightPx(): number {
+			if (!transport.isReady()) {
+				return uiCfg.widget.defaultHeightPx;
+			}
+
+			const v = dbgModel.get(TRAITS.widgetHeightPx);
+			if (!(typeof v === "number" && Number.isFinite(v) && v > 0)) {
+				throw new Error(
+					`widget_height_px_t must be a finite number > 0 once transport is ready, got ${String(
+						v,
+					)}`,
+				);
+			}
+			return v;
+		}
+
 		heightController = createHeightController({
 			hostEl: el,
 			rootEl: root,
-			desiredPx: 800, // temporary TS-side constant; will become a traitlet
+			getDesiredPx: getDesiredHeightPx,
 			onApplied: () => {
 				// Height changes must immediately propagate to canvas sizing.
 				resizeController.applyNow();
 			},
 		});
 
-		// Best-effort initial apply; if allocation isn't measurable yet, controller is a no-op
-		// and will apply on subsequent ResizeObserver callbacks.
+		// Apply once on startup
 		heightController.applyNow();
+
+		// When Python acks readiness, re-apply so we switch from fallback -> authoritative value.
+		const offReady = transport.onReadyChange(() => {
+			heightController?.applyNow();
+		});
+		disposers.push(offReady);
+
+		// Also re-apply when the trait itself changes (once transport is flowing)
+		const onWidgetHeightChange = () => {
+			heightController?.applyNow();
+		};
+		dbgModel.on(changeEvent(TRAITS.widgetHeightPx), onWidgetHeightChange);
+		disposers.push(() =>
+			dbgModel.off(changeEvent(TRAITS.widgetHeightPx), onWidgetHeightChange),
+		);
 	}
 
 	const forceResize = () => {

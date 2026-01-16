@@ -21,6 +21,7 @@ def _():
     species = Category(pandas.Series(species, name="species"))
 
     w = Scatter3dWidget(xyz=points, category=species, point_ids=point_ids)
+    w.height = 800
     ui = marimo.ui.anywidget(w)
     ui
     return species, ui, w
