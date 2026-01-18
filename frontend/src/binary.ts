@@ -2,7 +2,7 @@ export type BytesLike =
 	| ArrayBuffer
 	| Uint8Array
 	| DataView
-	| { buffer: ArrayBuffer }; // covers some widget wrappers
+	| { buffer: ArrayBufferLike }; // widen: allow SharedArrayBuffer too
 
 export function bytesToUint8Array(x: unknown): Uint8Array {
 	if (x instanceof Uint8Array) return x;
@@ -13,11 +13,18 @@ export function bytesToUint8Array(x: unknown): Uint8Array {
 	// sometimes you get an object that has a .buffer
 	if (x && typeof x === "object" && "buffer" in x) {
 		const b = (x as any).buffer;
+		// ArrayBufferLike isn't a runtime constructor, so check the actual concrete types.
 		if (b instanceof ArrayBuffer) return new Uint8Array(b);
+		if (
+			typeof SharedArrayBuffer !== "undefined" &&
+			b instanceof SharedArrayBuffer
+		) {
+			return new Uint8Array(b);
+		}
 	}
 
 	throw new Error(
-		`Expected bytes-like (Uint8Array | ArrayBuffer | DataView | {buffer:ArrayBuffer}), got: ${typeof x}`,
+		`Expected bytes-like (Uint8Array | ArrayBuffer | DataView | {buffer:ArrayBufferLike}), got: ${typeof x}`,
 	);
 }
 
@@ -43,7 +50,7 @@ export function uint8ArrayToBase64(u8: Uint8Array): string {
 function alignedViewOrCopy<T>(
 	u8: Uint8Array,
 	bytesPerElement: number,
-	makeView: (buf: ArrayBuffer, offset: number, length: number) => T,
+	makeView: (buf: ArrayBufferLike, offset: number, length: number) => T, // <-- widen
 ): T {
 	const byteOffset = u8.byteOffset;
 	const byteLength = u8.byteLength;
