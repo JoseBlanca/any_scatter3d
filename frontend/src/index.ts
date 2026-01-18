@@ -69,8 +69,10 @@ export function buildWidget(
 
 	const { root, toolbar, tooltip, canvasHost } = createWidgetRoot(el);
 
+	const uiCfg = DEFAULT_UI_CONFIG;
+
 	// --- 3D layer (three.js) ---
-	const three = createThreeScene(canvasHost, dbgModel);
+	const three = createThreeScene(canvasHost, dbgModel, uiCfg);
 	three.domElement.style.position = "absolute";
 	three.domElement.style.inset = "0";
 	three.domElement.style.zIndex = "1"; // below overlay
@@ -98,7 +100,6 @@ export function buildWidget(
 	const tooltipView = createTooltipView(tooltip);
 
 	// --- UI ---
-	const uiCfg = DEFAULT_UI_CONFIG;
 	const bar = createControlBar(toolbar, uiCfg);
 
 	function showMessage(msg: string) {

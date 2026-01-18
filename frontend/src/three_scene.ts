@@ -10,6 +10,7 @@ import {
 } from "./binary";
 import { buildColorBuffer } from "./color_mapping";
 import { buildSizeBuffer } from "./size_mapping";
+import type { UiConfig } from "./ui_config";
 
 export type ThreeScene = {
 	domElement: HTMLCanvasElement;
@@ -123,6 +124,7 @@ function getPositiveFiniteNumber(v: unknown, fallback: number): number {
 export function createThreeScene(
 	canvasHost: HTMLElement,
 	model: WidgetModel,
+	ui: UiConfig,
 ): ThreeScene {
 	// --- renderer / scene / camera ---
 	const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -226,7 +228,7 @@ export function createThreeScene(
 	// Ensure Points params object exists, then set threshold (world units)
 	const pointsParams: { threshold?: number } =
 		raycaster.params.Points ?? (raycaster.params.Points = {});
-	pointsParams.threshold = 0.06;
+	pointsParams.threshold = ui.three.pickThresholdWorld;
 
 	const ndc = new THREE.Vector2();
 

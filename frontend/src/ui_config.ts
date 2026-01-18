@@ -42,6 +42,11 @@ export type UiConfig = {
 		fontSizePx: number;
 		color: string;
 	};
+	three: {
+		// Raycaster threshold in world units for Points picking.
+		// Higher = easier to pick, lower = stricter.
+		pickThresholdWorld: number;
+	};
 };
 
 export const DEFAULT_UI_CONFIG: UiConfig = {
@@ -85,5 +90,8 @@ export const DEFAULT_UI_CONFIG: UiConfig = {
 		marginLeftPx: 8,
 		fontSizePx: 12,
 		color: "#b91c1c",
+	},
+	three: {
+		pickThresholdWorld: 0.06,
 	},
 };

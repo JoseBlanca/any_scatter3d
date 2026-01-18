@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { DEFAULT_UI_CONFIG } from "../src/ui_config";
 
 let restoreGetContext: (() => void) | null = null;
 
@@ -254,7 +255,7 @@ describe("three_scene setSize", () => {
 			},
 		};
 
-		const three = createThreeScene(host, model);
+		const three = createThreeScene(host, model, DEFAULT_UI_CONFIG);
 		expect(lastRenderer).not.toBeNull();
 
 		three.setSize(400, 300, 2);
