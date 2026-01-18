@@ -208,20 +208,6 @@ export function createHeightController(
 		rootEl.style.height = `${next}px`;
 		rootEl.style.minHeight = "";
 		onApplied?.(next);
-
-		if ((globalThis as any).__scatter3d_height_debug) {
-			const cs = window.getComputedStyle(constraintEl);
-			console.debug("[scatter3d][height][applyNow]", {
-				constraintEl,
-				tag: constraintEl.tagName,
-				className: constraintEl.className,
-				desiredPx,
-				maxHeight: cs.maxHeight,
-				maxAllowedPx,
-				overheadPx,
-				nextPx: next,
-			});
-		}
 	}
 
 	return {
