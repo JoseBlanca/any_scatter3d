@@ -1,4 +1,4 @@
-import type { WidgetModel } from "./model";
+import type { WidgetModel, TraitValueMap, SaveChangesReturn } from "./model";
 import { dlog } from "./debug";
 
 function traitFromChangeEvent(event: string): string | null {
@@ -13,22 +13,40 @@ function traitFromChangeEvent(event: string): string | null {
  */
 let __loggedTransportNotReady = false;
 
+function readDirtyFieldsSize(model: unknown): number {
+	// anywidget model may expose dirtyFields as a Set-like with a numeric .size.
+	const m = model as Record<string, unknown>;
+	const dirty = m["dirtyFields"];
+
+	if (dirty && typeof dirty === "object") {
+		const size = (dirty as Record<string, unknown>)["size"];
+		if (typeof size === "number" && Number.isFinite(size) && size >= 0) {
+			return size;
+		}
+	}
+	return 0;
+}
+
 export function makeDebugModel(
 	base: WidgetModel,
 	debug: { modelChangeHandlers: string[] },
 ): WidgetModel {
 	return {
-		get: (key: string) => base.get(key),
-		set: (key: string, value: unknown) => base.set(key, value),
+		get: <K extends keyof TraitValueMap>(key: K): TraitValueMap[K] =>
+			base.get(key),
 
-		save_changes: () => {
-			// anywidget model exposes dirtyFields; use it to detect a "send expected" situation.
-			const dirtyBefore = (base as any)?.dirtyFields?.size ?? 0;
+		set: <K extends keyof TraitValueMap>(
+			key: K,
+			value: TraitValueMap[K],
+		): void => base.set(key, value),
+
+		save_changes: (): SaveChangesReturn => {
+			const dirtyBefore = readDirtyFieldsSize(base);
 
 			const ret = base.save_changes();
 
 			// Professional fail-fast: if we had dirty fields, a send was required.
-			// If save_changes returns void, the widget is not interactive yet (no comm).
+			// If save_changes returns undefined, the widget is not interactive yet (no comm).
 			if (dirtyBefore > 0 && ret === undefined) {
 				// Debug-only, one-shot. Never crash render due to missing transport.
 				if (!__loggedTransportNotReady) {
@@ -39,20 +57,19 @@ export function makeDebugModel(
 						{ dirtyBefore },
 					);
 				}
-				return undefined;
 			}
 
-			return ret as any;
+			return ret;
 		},
 
-		on: (event: string, cb: () => void) => {
+		on: (event: string, cb: () => void): void => {
 			const trait = traitFromChangeEvent(event);
 			if (trait) debug.modelChangeHandlers.push(trait);
 			base.on(event, cb);
 		},
 
-		off: (event: string, cb: () => void) => {
-			base.off(event, cb);
+		off: (event: string, callback: () => void): void => {
+			base.off(event, callback);
 		},
 	};
 }
