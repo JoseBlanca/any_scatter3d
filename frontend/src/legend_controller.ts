@@ -2,6 +2,15 @@ import type { WidgetModel, RGB } from "./model";
 import { TRAITS } from "./model";
 import type { LegendView, LegendMode } from "./legend_view";
 
+function isPromiseLike(x: unknown): x is PromiseLike<unknown> {
+	return (
+		typeof x === "object" &&
+		x !== null &&
+		"then" in x &&
+		typeof (x as { then?: unknown }).then === "function"
+	);
+}
+
 function readStringList(x: unknown, name: string): string[] {
 	if (!Array.isArray(x)) {
 		throw new Error(`${name} must be an array`);
@@ -64,9 +73,8 @@ export function createLegendController(deps: LegendControllerDeps): {
 	function safeSaveChanges(context: string) {
 		try {
 			const ret = model.save_changes();
-			// if promise-like, attach a rejection handler
-			if (ret && typeof (ret as any).then === "function") {
-				(ret as PromiseLike<unknown>).then(undefined, (err) => {
+			if (isPromiseLike(ret)) {
+				ret.then(undefined, (err) => {
 					console.warn(`[legend] save_changes failed (${context})`, err);
 				});
 			}
