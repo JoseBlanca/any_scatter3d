@@ -8,6 +8,13 @@ export type TransportReadyController = {
 	dispose: () => void;
 };
 
+function isThenable(x: unknown): x is PromiseLike<unknown> {
+	if (!x || (typeof x !== "object" && typeof x !== "function")) return false;
+	// Use a safe index access
+	const then = (x as { then?: unknown }).then;
+	return typeof then === "function";
+}
+
 export function createTransportReadyController(
 	model: WidgetModel,
 	opts?: { onError?: (err: unknown) => void },
@@ -55,8 +62,8 @@ export function createTransportReadyController(
 			inFlight = true;
 			const ret = model.save_changes();
 
-			if (ret && typeof (ret as any).then === "function") {
-				(ret as PromiseLike<unknown>).then(
+			if (isThenable(ret)) {
+				ret.then(
 					() => {
 						inFlight = false;
 						// Do NOT set announcedOk here; wait for interactive_ready_t

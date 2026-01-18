@@ -29,11 +29,22 @@ export type TooltipControllerDeps = {
 
 function isTooltipResponse(x: unknown): x is TooltipResponse {
 	if (!x || typeof x !== "object") return false;
-	const r = x as any;
-	if (typeof r.request_id !== "number") return false;
-	if (r.status !== "ok" && r.status !== "error") return false;
-	if (r.status === "ok" && (!r.data || typeof r.data !== "object"))
-		return false;
+
+	// Safe "dictionary" view of the object
+	const r = x as Record<string, unknown>;
+
+	const request_id = r.request_id;
+	if (typeof request_id !== "number") return false;
+
+	const status = r.status;
+	if (status !== "ok" && status !== "error") return false;
+
+	if (status === "ok") {
+		const data = r.data;
+		if (!data || typeof data !== "object") return false;
+	}
+
+	// For status === "error", message is optional and can be unknown, so no check needed.
 	return true;
 }
 
