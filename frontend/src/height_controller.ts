@@ -79,8 +79,15 @@ function getVerticalOverheadPx(el: HTMLElement): number {
 
 function getSearchStartEl(hostEl: HTMLElement): HTMLElement {
 	const rootNode = hostEl.getRootNode?.();
-	const maybeHost = rootNode && (rootNode as any).host;
-	return maybeHost instanceof HTMLElement ? maybeHost : hostEl;
+
+	if (rootNode instanceof ShadowRoot) {
+		const host = rootNode.host;
+		if (host instanceof HTMLElement) {
+			return host;
+		}
+	}
+
+	return hostEl;
 }
 
 function findConstraintElement(hostEl: HTMLElement): HTMLElement | null {
