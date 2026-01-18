@@ -1,3 +1,10 @@
+## 0.1.3 - 2026-01-18
+### Added
+- Possibility of changing the widget height through the Python interface
+
+### Changed
+- Internal cleanup/refactors.
+
 ## 0.1.2 - 2026-01-12
 ### Added
 - Legend UI improvements: selected label highlight/background; legend positioned as an overlay on the canvas.
