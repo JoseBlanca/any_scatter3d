@@ -110,8 +110,10 @@ function getUntypedStringTrait(
 	key: string,
 	fallback: string,
 ): string {
-	const v = (model as any).get?.(key);
-	return typeof v === "string" && v.length ? v : fallback;
+	// Escape hatch for legacy/unknown traits without weakening the whole file.
+	const m = model as unknown as { get?: (k: string) => unknown };
+	const v = m.get?.(key);
+	return typeof v === "string" && v.length > 0 ? v : fallback;
 }
 
 function getPositiveFiniteNumber(v: unknown, fallback: number): number {
@@ -220,9 +222,11 @@ export function createThreeScene(
 	scene.add(pointsObj);
 
 	const raycaster = new THREE.Raycaster();
-	raycaster.params.Points = raycaster.params.Points ?? {};
-	// Tune this (world units). Start here and adjust by feel.
-	(raycaster.params.Points as any).threshold = 0.06;
+
+	// Ensure Points params object exists, then set threshold (world units)
+	const pointsParams: { threshold?: number } =
+		raycaster.params.Points ?? (raycaster.params.Points = {});
+	pointsParams.threshold = 0.06;
 
 	const ndc = new THREE.Vector2();
 
@@ -233,8 +237,8 @@ export function createThreeScene(
 		const hits = raycaster.intersectObject(pointsObj, false);
 		if (!hits.length) return null;
 
-		const idx = (hits[0] as any).index;
-		return Number.isFinite(idx) ? (idx as number) : null;
+		const idx = (hits[0] as Record<string, unknown>)["index"];
+		return typeof idx === "number" && Number.isFinite(idx) ? idx : null;
 	}
 
 	const axesGroup = new THREE.Group();
