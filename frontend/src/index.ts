@@ -35,47 +35,20 @@ export type WidgetHandles = {
 	};
 };
 
+const cleanupByEl = new WeakMap<HTMLElement, () => void>();
+
 function isInMarimoOutputArea(el: HTMLElement): boolean {
 	// In marimo, the widget is typically rendered inside a ShadowRoot.
 	// closest() does not cross the shadow boundary, so we must check from
 	// the shadow host when present.
 	const rootNode = el.getRootNode?.();
+
 	const searchStart =
-		rootNode && (rootNode as any).host instanceof HTMLElement
-			? ((rootNode as any).host as HTMLElement)
+		rootNode instanceof ShadowRoot && rootNode.host instanceof HTMLElement
+			? rootNode.host
 			: el;
 
 	return Boolean(searchStart.closest?.('[data-cell-role="output"]'));
-}
-
-function bindAndRecordPointer(
-	debug: WidgetHandles["debug"],
-	target: EventTarget,
-	targetName: string,
-	type: string,
-	handler: (e: PointerEvent) => void,
-	options?: boolean | AddEventListenerOptions,
-) {
-	const capture =
-		typeof options === "boolean"
-			? options
-			: Boolean((options as AddEventListenerOptions | undefined)?.capture);
-
-	target.addEventListener(type, handler as any, options as any);
-	debug.boundPointerEvents.push(
-		`${targetName}:${type}:${capture ? "capture" : "bubble"}`,
-	);
-
-	return () => target.removeEventListener(type, handler as any, options as any);
-}
-
-function isPromiseLike(x: unknown): x is PromiseLike<unknown> {
-	return (
-		typeof x === "object" &&
-		x !== null &&
-		"then" in x &&
-		typeof (x as any).then === "function"
-	);
 }
 
 export function buildWidget(
@@ -120,60 +93,6 @@ export function buildWidget(
 
 	const state = createInteractionState();
 	const abortController = new AbortController();
-
-	// Pointer debug listeners (these are *yours*; controllers may also bind their own)
-	function logPtr(label: string) {
-		return (e: PointerEvent) => {
-			const path = (e.composedPath?.() ?? []) as any[];
-			const top = path[0] as HTMLElement | undefined;
-		};
-	}
-
-	const disposers: Array<() => void> = [];
-
-	const logCanvas = logPtr("overlay");
-	const logThree = logPtr("three");
-
-	// capture=true so you see events even if something stops propagation later
-	for (const t of ["pointerdown", "pointermove", "pointerup"]) {
-		disposers.push(
-			bindAndRecordPointer(debug, overlayCanvas, "overlay", t, logCanvas, true),
-		);
-		disposers.push(
-			bindAndRecordPointer(debug, three.domElement, "three", t, logThree, true),
-		);
-	}
-
-	function logTopElement(tag: string) {
-		const r = canvasHost.getBoundingClientRect();
-
-		// pick a point inside the host rect, but clamp to viewport so elementFromPoint never returns null
-		const vx0 = 0;
-		const vy0 = 0;
-		const vx1 = window.innerWidth - 1;
-		const vy1 = window.innerHeight - 1;
-
-		const cxRaw = r.left + r.width / 2;
-		const cyRaw = r.top + r.height / 2;
-
-		const cx = Math.min(vx1, Math.max(vx0, cxRaw));
-		const cy = Math.min(vy1, Math.max(vy0, cyRaw));
-
-		// jsdom (vitest) may not implement elementFromPoint; debug code must never crash startup.
-		if (typeof document.elementFromPoint !== "function") {
-			return;
-		}
-		const topEl = document.elementFromPoint(cx, cy) as HTMLElement | null;
-
-		const three_dom = three.domElement;
-		const overlay = overlayCanvas;
-
-		const csTop = topEl ? window.getComputedStyle(topEl) : null;
-		const csThree = window.getComputedStyle(three_dom);
-		const csOverlay = window.getComputedStyle(overlay);
-	}
-	logTopElement("init");
-	requestAnimationFrame(() => logTopElement("raf1"));
 
 	// tooltip view
 	const tooltipView = createTooltipView(tooltip);
@@ -314,6 +233,8 @@ export function buildWidget(
 	// Height clamp to marimo output allocation (prevents scrollbars).
 	let heightController: { applyNow: () => void; dispose: () => void } | null =
 		null;
+
+	const disposers: Array<() => void> = [];
 
 	if (isInMarimoOutputArea(el)) {
 		function getDesiredHeightPx(): number {
@@ -475,13 +396,11 @@ export function buildWidget(
 }
 
 export function render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
-	const cleanupPrev = (el as any).__any_scatter3d_cleanup as
-		| undefined
-		| (() => void);
+	const cleanupPrev = cleanupByEl.get(el);
 	cleanupPrev?.();
 
 	const handles = buildWidget(model, el, { startRaf: true });
-	(el as any).__any_scatter3d_cleanup = handles.cleanup;
+	cleanupByEl.set(el, handles.cleanup);
 }
 
 export default { render };

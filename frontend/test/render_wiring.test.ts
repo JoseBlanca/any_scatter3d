@@ -89,15 +89,6 @@ describe("buildWidget wiring", () => {
 		expect(h.overlayCanvas).toBeInstanceOf(HTMLCanvasElement);
 		expect(h.root.contains(h.overlayCanvas)).toBe(true);
 
-		// Pointer listeners recorded via debug hook
-		// Expect overlay + three both have pointerdown/move/up capture
-		expect(h.debug.boundPointerEvents).toContain("overlay:pointerdown:capture");
-		expect(h.debug.boundPointerEvents).toContain("overlay:pointermove:capture");
-		expect(h.debug.boundPointerEvents).toContain("overlay:pointerup:capture");
-		expect(h.debug.boundPointerEvents).toContain("three:pointerdown:capture");
-		expect(h.debug.boundPointerEvents).toContain("three:pointermove:capture");
-		expect(h.debug.boundPointerEvents).toContain("three:pointerup:capture");
-
 		// Sanity: addEventListener was called at least for those.
 		// (This checks actual binding, not only debug strings.)
 		const types = addSpy.mock.calls.map((c) => c[0]);
