@@ -208,4 +208,31 @@ describe("height_controller", () => {
 			}),
 		).toThrow(/desiredPx must be > 0/);
 	});
+
+	it("works in marimo published/run DOM where output container is .output-area (no data-cell-role)", () => {
+		const outputArea = document.createElement("div");
+		outputArea.className = "output-area"; // marimo run
+		document.body.appendChild(outputArea);
+
+		// Put the constraint on the output area (common case)
+		outputArea.style.maxHeight = "500px";
+
+		const host = document.createElement("div");
+		outputArea.appendChild(host);
+
+		const root = document.createElement("div");
+		host.appendChild(root);
+
+		const ctrl = createHeightController({
+			hostEl: host,
+			rootEl: root,
+			getDesiredPx: () => 800,
+			onApplied: vi.fn(),
+		});
+
+		ctrl.applyNow();
+		expect(root.style.height).toBe("500px");
+
+		ctrl.dispose();
+	});
 });

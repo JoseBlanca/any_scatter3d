@@ -48,7 +48,9 @@ function isInMarimoOutputArea(el: HTMLElement): boolean {
 			? rootNode.host
 			: el;
 
-	return Boolean(searchStart.closest?.('[data-cell-role="output"]'));
+	return Boolean(
+		searchStart.closest?.('[data-cell-role="output"], .output-area'),
+	);
 }
 
 export function buildWidget(

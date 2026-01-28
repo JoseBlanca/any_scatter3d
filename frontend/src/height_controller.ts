@@ -94,7 +94,7 @@ function findConstraintElement(hostEl: HTMLElement): HTMLElement | null {
 	const searchStart = getSearchStartEl(hostEl);
 
 	const outputArea = searchStart.closest<HTMLElement>(
-		'[data-cell-role="output"]',
+		'[data-cell-role="output"], .output-area',
 	);
 	if (!outputArea) return null;
 
@@ -154,7 +154,7 @@ export function createHeightController(
 	const constraintElMaybe = findConstraintElement(hostEl);
 	if (!constraintElMaybe) {
 		throw new Error(
-			`height_controller: could not find constraint element (expected closest('[data-cell-role="output"]') from widget host)`,
+			`height_controller: could not find constraint element (expected closest('[data-cell-role="output"], .output-area') from widget host)`,
 		);
 	}
 	const constraintEl: HTMLElement = constraintElMaybe;
