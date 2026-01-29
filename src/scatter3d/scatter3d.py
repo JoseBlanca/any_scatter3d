@@ -742,6 +742,10 @@ class Scatter3dWidget(anywidget.AnyWidget):
             )
         return v
 
+    @property
+    def active_category(self):
+        return self.active_category_t
+
     @traitlets.observe("tooltip_request_t")
     def _on_tooltip_request(self, change) -> None:
         req = change["new"] or {}

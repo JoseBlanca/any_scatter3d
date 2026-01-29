@@ -46,12 +46,8 @@ def _(category, ui, w):
 
 
 @app.cell
-def _(species, ui, w):
-    ui.lasso_result_t
-    print(species.values.value_counts())
-    print(species.num_unassigned)
-    print(species.values)
-    print(w.point_ids)
+def _(w):
+    print(w.active_category)
     return
 
 
