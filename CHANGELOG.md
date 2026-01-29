@@ -1,3 +1,8 @@
+## 0.1.5 - 2026-01-29
+### Added
+- Categories can be not editable
+- active_category is now a public property
+
 ## 0.1.4 - 2026-01-28
 ### Bug fix
 - In marimo run mode the widget had no height
