@@ -4,6 +4,7 @@ import { FakeModel } from "./fake_model";
 import { createInteractionState } from "../src/interaction";
 import { createInteractionController } from "../src/interaction_controller";
 import { TRAITS } from "../src/model";
+import { createControlBar } from "../src/ui";
 
 function makeBar() {
 	return {
@@ -34,6 +35,7 @@ describe("interaction_controller: lasso transport warning", () => {
 		const model = new FakeModel();
 		model.set(TRAITS.interactionMode, "rotate");
 		model.set(TRAITS.activeCategory, "");
+		model.set(TRAITS.categoryEditable, true);
 
 		// State (size irrelevant for this test, but keep invariants sane)
 		const state = createInteractionState();
@@ -42,7 +44,28 @@ describe("interaction_controller: lasso transport warning", () => {
 		state.pixelHeight = 300;
 
 		// Minimal deps
-		const bar = makeBar();
+		const toolbar = document.createElement("div");
+		document.body.appendChild(toolbar);
+
+		const cfg: any = {
+			controlBar: { gapPx: 0 },
+			messages: { marginLeftPx: 0, fontSizePx: 12, color: "#000" },
+			buttons: {
+				padding: "0",
+				borderRadiusPx: 0,
+				border: "0",
+				font: "system-ui",
+				inactiveBg: "#fff",
+				inactiveText: "#000",
+				activeBg: "#000",
+				activeText: "#fff",
+				removeActiveBg: "#000",
+				removeActiveText: "#fff",
+			},
+		};
+
+		const bar = createControlBar(toolbar, cfg);
+
 		const syncUiFromState = vi.fn();
 
 		const showMessage = vi.fn();

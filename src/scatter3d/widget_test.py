@@ -23,6 +23,9 @@ def _():
     countries = random.choices(countries_list, k=num_points)
     countries = Category(pandas.Series(countries, name="countries"))
 
+    species2 = random.choices(species_list, k=num_points)
+    species2 = Category(pandas.Series(species2, name="species2"), editable=False)
+
     w = Scatter3dWidget(xyz=points, category=species, point_ids=point_ids)
     w.height = 800
     ui = marimo.ui.anywidget(w)

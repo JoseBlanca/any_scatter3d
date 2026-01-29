@@ -1,5 +1,5 @@
+import { TRAITS, changeEvent } from "./model";
 import type { WidgetModel, LassoRequest, LassoOp } from "./model";
-import { TRAITS } from "./model";
 import type { ThreeScene } from "./three_scene";
 import type { ControlBar } from "./ui";
 import {
@@ -70,6 +70,21 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 		debug,
 	} = deps;
 
+	// ---- invariants (fail fast with clear errors) ----
+	if (!bar || !bar.el) {
+		throw new Error(
+			"Invariant violation: InteractionController requires a ControlBar with `el` set. " +
+				"Your test harness likely stubs the bar; use createControlBar(...) or provide el.",
+		);
+	}
+
+	const editableTrait = model.get(TRAITS.categoryEditable);
+	if (editableTrait !== true && editableTrait !== false) {
+		throw new Error(
+			"Invariant violation: model must provide boolean trait category_editable_t (TRAITS.categoryEditable).",
+		);
+	}
+
 	// initial mode
 	function applyMode(
 		next: { kind: "rotate" } | { kind: "lasso"; operation: LassoOp },
@@ -94,6 +109,31 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 	// initial mode
 	applyMode({ kind: "rotate" });
 
+	function isCategoryEditable(): boolean {
+		return model.get(TRAITS.categoryEditable) === true;
+	}
+
+	function applyCategoryEditablePolicy() {
+		const editable = isCategoryEditable();
+
+		// show/hide entire bar (only lasso UI lives there)
+		bar.el.style.display = editable ? "" : "none";
+
+		if (!editable) {
+			// hard policy: rotate-only
+			if (state.mode.kind === "lasso") {
+				cancelLasso(state);
+			}
+			applyMode({ kind: "rotate" });
+		}
+	}
+
+	// apply once on init
+	applyCategoryEditablePolicy();
+
+	// react to changes (category can be swapped at runtime)
+	model.on(changeEvent(TRAITS.categoryEditable), applyCategoryEditablePolicy);
+
 	// toolbar buttons
 	bar.rotateBtn.addEventListener(
 		"click",
@@ -106,6 +146,7 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 	bar.lassoBtn.addEventListener(
 		"click",
 		() => {
+			if (!isCategoryEditable()) return;
 			if (!transportReady()) {
 				showMessage(
 					"Widget not interactive yet. Maybe you should run the cell to enable lasso.",
@@ -334,7 +375,10 @@ export function createInteractionController(deps: InteractionControllerDeps): {
 
 	return {
 		dispose: () => {
-			// DOM listeners removed by AbortController signal
+			model.off(
+				changeEvent(TRAITS.categoryEditable),
+				applyCategoryEditablePolicy,
+			);
 		},
 	};
 }

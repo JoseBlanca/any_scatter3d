@@ -1,3 +1,7 @@
+## 0.1.4 - 2026-01-28
+### Bug fix
+- In marimo run mode the widget had no height
+
 ## 0.1.3 - 2026-01-18
 ### Added
 - Possibility of changing the widget height through the Python interface

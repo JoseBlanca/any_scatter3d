@@ -78,6 +78,7 @@ describe("buildWidget wiring", () => {
 		model.set("interaction_mode_t", "rotate");
 		model.set("legend_side_t", "right");
 		model.set("legend_dock_t", "top");
+		model.set("category_editable_t", true);
 
 		// spy on addEventListener calls on canvas elements
 		const addSpy = vi.spyOn(HTMLCanvasElement.prototype, "addEventListener");
@@ -118,6 +119,7 @@ describe("buildWidget wiring", () => {
 		model.set("interaction_mode_t", "rotate");
 		model.set("legend_side_t", "right");
 		model.set("legend_dock_t", "top");
+		model.set("category_editable_t", true);
 
 		const h = buildWidget(model as any, el);
 
@@ -150,6 +152,7 @@ describe("buildWidget wiring", () => {
 		model.set("interaction_mode_t", "rotate");
 		model.set("legend_side_t", "right");
 		model.set("legend_dock_t", "top");
+		model.set("category_editable_t", true);
 
 		const h = buildWidget(model as any, el);
 
@@ -171,6 +174,7 @@ describe("buildWidget wiring", () => {
 		model.set("interaction_mode_t", "rotate");
 		model.set("legend_side_t", "right");
 		model.set("legend_dock_t", "top");
+		model.set("category_editable_t", true);
 
 		// make lasso button not early-return
 		model.set("interactive_ready_t", true);

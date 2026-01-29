@@ -80,6 +80,7 @@ class Category:
         label_list=None,
         color_palette: dict[Any, tuple[float, float, float]] | None = None,
         missing_color: tuple[float, float, float] = MISSING_COLOR,
+        editable: bool = True,
     ):
         self._cb_id_gen = count(1)
         self._callbacks: dict[int, weakref.ReferenceType] = {}
@@ -101,6 +102,8 @@ class Category:
 
         _is_valid_color(missing_color)
         self._missing_color = missing_color
+
+        self._editable = bool(editable)
 
     def subscribe(self, cb: CategoryCallback) -> int:
         cb_id = next(self._cb_id_gen)
@@ -124,6 +127,10 @@ class Category:
                 cb(self, event)
         for cb_id in dead:
             self._callbacks.pop(cb_id, None)
+
+    @property
+    def editable(self) -> bool:
+        return self._editable
 
     @staticmethod
     def _get_unique_labels_in_values(values):
@@ -495,6 +502,11 @@ class Scatter3dWidget(anywidget.AnyWidget):
         help="Desired widget height in CSS pixels. Frontend will clamp to notebook constraints.",
     ).tag(sync=True)
 
+    category_editable_t = traitlets.Bool(
+        default_value=True,
+        help="Whether the active category is editable (enables lasso UI).",
+    ).tag(sync=True)
+
     def __init__(
         self,
         xyz: numpy.ndarray,
@@ -844,6 +856,13 @@ class Scatter3dWidget(anywidget.AnyWidget):
         # labels_t must be JSON-friendly; enforce str
         labels = [str(lbl) for lbl in cat.label_list]
         self.labels_t = labels
+
+        self.category_editable_t = cat.editable
+
+        if not self.category_editable_t and self.interaction_mode_t == "lasso":
+            self.interaction_mode_t = "rotate"
+            if self.interactive_ready_t:
+                self.send_state("interaction_mode_t")
 
         # coded values: uint16 bytes, length N
         coded = cat.coded_values

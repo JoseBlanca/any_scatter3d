@@ -3,26 +3,40 @@ import { FakeModel } from "./fake_model";
 import { createInteractionController } from "../src/interaction_controller";
 import { TRAITS } from "../src/model";
 import type { InteractionState } from "../src/interaction";
-
-// Minimal stub for ControlBar
-function makeBar() {
-	const rotateBtn = document.createElement("button");
-	const lassoBtn = document.createElement("button");
-	const addBtn = document.createElement("button");
-	const removeBtn = document.createElement("button");
-	return { rotateBtn, lassoBtn, addBtn, removeBtn } as any;
-}
+import { createControlBar } from "../src/ui";
 
 describe("lasso commit focus contract", () => {
 	it("sends lasso commit when Enter is pressed even if root is not focused (while in lasso mode)", () => {
 		const model = new FakeModel() as any;
 		model.set(TRAITS.activeCategory, "A");
+		model.set(TRAITS.categoryEditable, true);
 
 		const three = {
 			selectMaskInLasso: vi.fn(() => new Uint8Array([0x80])),
 		} as any;
 
-		const bar = makeBar();
+		const toolbar = document.createElement("div");
+		document.body.appendChild(toolbar);
+
+		const cfg: any = {
+			controlBar: { gapPx: 0 },
+			messages: { marginLeftPx: 0, fontSizePx: 12, color: "#000" },
+			buttons: {
+				padding: "0",
+				borderRadiusPx: 0,
+				border: "0",
+				font: "system-ui",
+				inactiveBg: "#fff",
+				inactiveText: "#000",
+				activeBg: "#000",
+				activeText: "#fff",
+				removeActiveBg: "#000",
+				removeActiveText: "#fff",
+			},
+		};
+
+		const bar = createControlBar(toolbar, cfg);
+
 		const root = document.createElement("div");
 		const canvas = document.createElement("canvas");
 
@@ -63,9 +77,7 @@ describe("lasso commit focus contract", () => {
 			],
 		};
 
-		document.dispatchEvent(
-			new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-		);
+		window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
 
 		const keys = (model as any).setCalls.map((c: any) => c.key);
 		expect(keys).toContain(TRAITS.lassoMask);
@@ -79,12 +91,34 @@ describe("lasso commit focus contract", () => {
 	it("does not send lasso commit on Enter when not in lasso mode", () => {
 		const model = new FakeModel() as any;
 		model.set(TRAITS.activeCategory, "A");
+		model.set(TRAITS.categoryEditable, true);
 
 		const three = {
 			selectMaskInLasso: vi.fn(() => new Uint8Array([0x80])),
 		} as any;
 
-		const bar = makeBar();
+		const toolbar = document.createElement("div");
+		document.body.appendChild(toolbar);
+
+		const cfg: any = {
+			controlBar: { gapPx: 0 },
+			messages: { marginLeftPx: 0, fontSizePx: 12, color: "#000" },
+			buttons: {
+				padding: "0",
+				borderRadiusPx: 0,
+				border: "0",
+				font: "system-ui",
+				inactiveBg: "#fff",
+				inactiveText: "#000",
+				activeBg: "#000",
+				activeText: "#fff",
+				removeActiveBg: "#000",
+				removeActiveText: "#fff",
+			},
+		};
+
+		const bar = createControlBar(toolbar, cfg);
+
 		const root = document.createElement("div");
 		const canvas = document.createElement("canvas");
 
@@ -122,9 +156,7 @@ describe("lasso commit focus contract", () => {
 		});
 
 		// Enter pressed globally, but mode is rotate
-		document.dispatchEvent(
-			new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-		);
+		window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
 
 		const keys = (model as any).setCalls.map((c: any) => c.key);
 		expect(keys).not.toContain(TRAITS.lassoMask);

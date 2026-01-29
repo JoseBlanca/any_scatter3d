@@ -4,6 +4,7 @@ import { FakeModel } from "./fake_model";
 import { createInteractionState } from "../src/interaction";
 import { createInteractionController } from "../src/interaction_controller";
 import { TRAITS, type LassoRequest } from "../src/model";
+import { createControlBar } from "../src/ui";
 
 // Helper to dispatch pointer events
 function pe(
@@ -24,10 +25,8 @@ function pe(
 	target.dispatchEvent(ev);
 }
 
-function key(target: HTMLElement, k: string) {
-	target.dispatchEvent(
-		new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: k }),
-	);
+function key(k: string) {
+	window.dispatchEvent(new KeyboardEvent("keydown", { key: k }));
 }
 
 function makeRect(w: number, h: number) {
@@ -44,15 +43,28 @@ function makeRect(w: number, h: number) {
 	} as any;
 }
 
-function makeBar() {
-	// Minimal ControlBar: just the buttons that interaction_controller uses.
-	// No UI/UX behavior changes, just test scaffolding.
-	return {
-		rotateBtn: document.createElement("button"),
-		lassoBtn: document.createElement("button"),
-		addBtn: document.createElement("button"),
-		removeBtn: document.createElement("button"),
-	} as any;
+function makeRealBar() {
+	const toolbar = document.createElement("div");
+	document.body.appendChild(toolbar);
+
+	const cfg: any = {
+		controlBar: { gapPx: 0 },
+		messages: { marginLeftPx: 0, fontSizePx: 12, color: "#000" },
+		buttons: {
+			padding: "0",
+			borderRadiusPx: 0,
+			border: "0",
+			font: "system-ui",
+			inactiveBg: "#fff",
+			inactiveText: "#000",
+			activeBg: "#000",
+			activeText: "#fff",
+			removeActiveBg: "#000",
+			removeActiveText: "#fff",
+		},
+	};
+
+	return createControlBar(toolbar, cfg);
 }
 
 describe("interaction_controller: lasso commit emits model request", () => {
@@ -90,6 +102,7 @@ describe("interaction_controller: lasso commit emits model request", () => {
 		const model = new FakeModel();
 		model.set(TRAITS.activeCategory, "testlabel");
 		model.set(TRAITS.interactionMode, "lasso");
+		model.set(TRAITS.categoryEditable, true);
 
 		// ThreeScene stub: controller calls selectMaskInLasso(polygonNdc)
 		const selectMaskInLasso = vi.fn(() => new Uint8Array([255]));
@@ -102,7 +115,7 @@ describe("interaction_controller: lasso commit emits model request", () => {
 		state.pixelHeight = 300;
 
 		// Bar + deps
-		const bar = makeBar();
+		const bar = makeRealBar();
 		const syncUiFromState = vi.fn();
 
 		const showMessage = vi.fn();
@@ -136,7 +149,7 @@ describe("interaction_controller: lasso commit emits model request", () => {
 		pe("pointerup", canvas, { clientX: 30, clientY: 10, buttons: 0 });
 
 		// Commit via Enter (user-facing behavior)
-		key(root, "Enter");
+		key("Enter");
 
 		// No ignores, no warning messages
 		expect(ignores).toEqual([]);
@@ -203,6 +216,7 @@ describe("interaction_controller: lasso commit emits model request", () => {
 		const model = new FakeModel();
 		model.set(TRAITS.activeCategory, "testlabel");
 		model.set(TRAITS.interactionMode, "lasso");
+		model.set(TRAITS.categoryEditable, true);
 
 		const three = { selectMaskInLasso: vi.fn(() => new Uint8Array()) } as any;
 
@@ -211,7 +225,7 @@ describe("interaction_controller: lasso commit emits model request", () => {
 		state.pixelWidth = 400;
 		state.pixelHeight = 300;
 
-		const bar = makeBar();
+		const bar = makeRealBar();
 		const syncUiFromState = vi.fn();
 
 		const ignores: string[] = [];
@@ -237,7 +251,7 @@ describe("interaction_controller: lasso commit emits model request", () => {
 		pe("pointermove", canvas, { clientX: 30, clientY: 10, buttons: 1 });
 		pe("pointerup", canvas, { clientX: 30, clientY: 10, buttons: 0 });
 
-		key(root, "Enter");
+		key("Enter");
 
 		const setKeys = model.setCalls.map((c) => c.key);
 		expect(setKeys).not.toContain(TRAITS.lassoMask);

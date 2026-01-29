@@ -24,6 +24,7 @@ export const TRAITS = {
 	// Legend + mode (Python is authoritative)
 	interactionMode: "interaction_mode_t",
 	activeCategory: "active_category_t",
+	categoryEditable: "category_editable_t",
 	legendSide: "legend_side_t",
 	legendDock: "legend_dock_t",
 
@@ -106,6 +107,7 @@ export type TraitValueMap = {
 	// Mode + legend
 	[TRAITS.interactionMode]: "rotate" | "lasso" | null | undefined;
 	[TRAITS.activeCategory]: string | null | undefined;
+	[TRAITS.categoryEditable]: boolean | null | undefined;
 
 	[TRAITS.legendSide]: "left" | "right" | null | undefined;
 	[TRAITS.legendDock]: "top" | "bottom" | null | undefined;
