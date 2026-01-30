@@ -206,7 +206,59 @@ describe("legend controller", () => {
 		view.dispose();
 		host.remove();
 	});
-	it("lasso invariant (python-authoritative): when entering lasso with no active category, python sets first label and UI reflects it", () => {
+
+	it("change burst: transient labels/colors mismatch does not throw and eventually renders", async () => {
+		const host = document.createElement("div");
+		document.body.appendChild(host);
+
+		const model = new FakeModel();
+		setupModel(model);
+		model.set(TRAITS.interactionMode, "rotate");
+		model.set(TRAITS.activeCategory, null);
+
+		const view = createLegendView(host, DEFAULT_UI_CONFIG);
+		const ctrl = createLegendController({
+			model: model as any,
+			view,
+			transportReady: transportReadyYes,
+		});
+
+		// initial render
+		ctrl.refreshFromModel();
+
+		// Simulate Python sending labels first (now length 4) while colors still old (length 3).
+		model.set(TRAITS.labels, ["x", "y", "z", "w"]);
+		expect(() => model.emit(`change:${TRAITS.labels}`)).not.toThrow();
+
+		// Now send colors later (length 4).
+		model.set(TRAITS.colors, [
+			[1, 0, 0],
+			[0, 1, 0],
+			[0, 0, 1],
+			[1, 1, 0],
+		]);
+		expect(() => model.emit(`change:${TRAITS.colors}`)).not.toThrow();
+
+		// Flush microtasks (our controller schedules refresh via queueMicrotask).
+		await Promise.resolve();
+		await Promise.resolve();
+
+		// Legend should reflect new items now.
+		const x = host.querySelector(
+			'[data-testid="legend-item:x"]',
+		) as HTMLElement;
+		const w = host.querySelector(
+			'[data-testid="legend-item:w"]',
+		) as HTMLElement;
+
+		expect(x).toBeTruthy();
+		expect(w).toBeTruthy();
+
+		ctrl.dispose();
+		view.dispose();
+		host.remove();
+	});
+	it("lasso invariant (python-authoritative): when entering lasso with no active category, python sets first label and UI reflects it", async () => {
 		const host = document.createElement("div");
 		document.body.appendChild(host);
 
@@ -233,6 +285,10 @@ describe("legend controller", () => {
 		// Python must enforce the invariant by selecting first label deterministically.
 		model.set(TRAITS.activeCategory, "a");
 		model.emit(`change:${TRAITS.activeCategory}`);
+
+		// Flush microtasks (legend refresh is coalesced via queueMicrotask).
+		await Promise.resolve();
+		await Promise.resolve();
 
 		// Assert UI reflects authoritative state: "a" active.
 		const a = host.querySelector(

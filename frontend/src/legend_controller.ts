@@ -110,8 +110,58 @@ export function createLegendController(deps: LegendControllerDeps): {
 		});
 	}
 
+	// Coalesce bursts of model updates (labels/colors/active/etc) into a single refresh.
+	// Important: trait updates from Python are not atomic. We may observe labels updated
+	// before colors (or vice versa) for a short window. That must not crash rendering.
+	let refreshScheduled = false;
+	let paletteRetryArmed = false;
+
+	function isPaletteIncompleteError(err: unknown): boolean {
+		return (
+			err instanceof Error && err.message.startsWith("Palette incomplete:")
+		);
+	}
+
+	function refreshFromModelLenient(): boolean {
+		try {
+			refreshFromModel(); // keep strict behavior here
+			return true;
+		} catch (err) {
+			// Transient mismatch during update burst: wait for next tick.
+			if (isPaletteIncompleteError(err)) return false;
+			throw err;
+		}
+	}
+
+	function scheduleRefresh() {
+		if (refreshScheduled) return;
+		refreshScheduled = true;
+
+		queueMicrotask(() => {
+			refreshScheduled = false;
+
+			const ok = refreshFromModelLenient();
+			if (ok) {
+				paletteRetryArmed = false;
+				return;
+			}
+
+			// Palette mismatch: allow exactly one retry on the next microtask.
+			// If it still doesn't converge, we don't want an infinite loop.
+			if (!paletteRetryArmed) {
+				paletteRetryArmed = true;
+				scheduleRefresh();
+			} else {
+				paletteRetryArmed = false;
+				console.warn(
+					"[legend] palette incomplete after retry; skipping refresh",
+				);
+			}
+		});
+	}
+
 	function onLegendTraitChange() {
-		refreshFromModel();
+		scheduleRefresh();
 	}
 
 	// Semantics on click: emit intent by updating active_category_t.

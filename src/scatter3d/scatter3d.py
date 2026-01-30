@@ -519,6 +519,9 @@ class Scatter3dWidget(anywidget.AnyWidget):
         super().__init__()
         self._category_cb_id: int | None = None
 
+        # Guard to suppress trait observers during multi-traitlet sync bursts
+        self._syncing_category = False
+
         if category is not None and xyz.shape[0] != category.num_values:
             raise ValueError(
                 f"The number of points ({xyz.shape[0]}) should match "
@@ -640,13 +643,19 @@ class Scatter3dWidget(anywidget.AnyWidget):
 
     @traitlets.observe("labels_t")
     def _on_labels_t(self, change) -> None:
+        # During category sync we temporarily allow intermediate inconsistent states.
+        if getattr(self, "_syncing_category", False):
+            return
+
         if self.interaction_mode_t == "lasso":
             self._ensure_active_category_invariants()
         elif self.active_category_t is not None and self.active_category_t not in (
             change.get("new") or []
         ):
             # in rotate mode, invalid active is a real error
-            raise RuntimeError(...)
+            raise RuntimeError(
+                f"active_category_t={self.active_category_t!r} is not present in labels_t after labels update"
+            )
 
     @traitlets.observe("client_ready_t")
     def _on_client_ready_t(self, change) -> None:
@@ -855,41 +864,54 @@ class Scatter3dWidget(anywidget.AnyWidget):
         if self._category is None:
             raise RuntimeError("The category should be set")
 
-        cat = self._category
+        self._syncing_category = True
+        try:
+            cat = self._category
 
-        # labels_t must be JSON-friendly; enforce str
-        labels = [str(lbl) for lbl in cat.label_list]
-        self.labels_t = labels
+            # labels_t must be JSON-friendly; enforce str
+            labels = [str(lbl) for lbl in cat.label_list]
+            self.labels_t = labels
 
-        self.category_editable_t = cat.editable
+            self.category_editable_t = cat.editable
 
-        if not self.category_editable_t and self.interaction_mode_t == "lasso":
-            self.interaction_mode_t = "rotate"
-            if self.interactive_ready_t:
-                self.send_state("interaction_mode_t")
+            if not self.category_editable_t and self.interaction_mode_t == "lasso":
+                self.interaction_mode_t = "rotate"
+                if self.interactive_ready_t:
+                    self.send_state("interaction_mode_t")
 
-        # coded values: uint16 bytes, length N
-        coded = cat.coded_values
-        if coded.shape[0] != self.num_points:
-            raise RuntimeError(
-                f"Category has {coded.shape[0]} values but xyz has {self.num_points} points"
-            )
-        self.coded_values_t = self._pack_u16_c(coded)
+            coded = cat.coded_values
+            if coded.shape[0] != self.num_points:
+                raise RuntimeError(
+                    f"Category has {coded.shape[0]} values but xyz has {self.num_points} points"
+                )
+            self.coded_values_t = self._pack_u16_c(coded)
 
-        # colors aligned with labels order
-        # Category stores palette keyed by original labels; we reconstruct in label_list order.
-        palette = cat.color_palette  # label -> (r,g,b)
-        self.colors_t = [list(map(float, palette[lbl])) for lbl in cat.label_list]
+            palette = cat.color_palette  # label -> (r,g,b)
+            self.colors_t = [list(map(float, palette[lbl])) for lbl in cat.label_list]
 
-        # missing color
-        self.missing_color_t = list(map(float, cat.missing_color))
+            self.missing_color_t = list(map(float, cat.missing_color))
 
-        if len(self.colors_t) != len(self.labels_t):
-            raise RuntimeError(
-                "Internal error: colors_t length must match labels_t length"
-            )
+            if len(self.colors_t) != len(self.labels_t):
+                raise RuntimeError(
+                    "Internal error: colors_t length must match labels_t length"
+                )
 
-        self._ensure_active_category_invariants()
+            # Now that labels/colors are consistent, enforce a stable policy for active category.
+            if self.interaction_mode_t == "rotate":
+                if (
+                    self.active_category_t is not None
+                    and self.active_category_t not in self.labels_t
+                ):
+                    # Professional + predictable: clear invalid selection on category switch.
+                    self.active_category_t = None
+                    if self.interactive_ready_t:
+                        self.send_state("active_category_t")
+            else:
+                # lasso mode keeps existing behavior: ensure a valid active label exists.
+                self._ensure_active_category_invariants()
+
+        finally:
+            self._syncing_category = False
 
     def _get_category(self):
         return self._category
