@@ -85,3 +85,20 @@ def test_switch_category_no_exception_after_fix_and_active_is_cleared_or_rebased
 
     # When we switch to a different category we have to reset the active category to None
     assert w.active_category_t is None or w.active_category_t in w.labels_t
+
+
+def test_category_mutation_does_not_clear_active_label_in_rotate_mode():
+    xyz = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=np.float32)
+    point_ids = ["p1", "p2", "p3"]
+
+    cat = _make_category(["A", "A", "B"], editable=True)
+    w = scatter3d.Scatter3dWidget(xyz=xyz, category=cat, point_ids=point_ids)
+    w.interaction_mode_t = "rotate"
+    w.active_category_t = "A"
+
+    # Mutate coded values (Category emits "coded_values" -> widget callback runs)
+    coded = cat.coded_values.copy()
+    coded[0] = coded[0]  # no-op but still sets; or change one value safely
+    cat.set_coded_values(coded_values=coded, label_list=cat.label_list)
+
+    assert w.active_category_t == "A"

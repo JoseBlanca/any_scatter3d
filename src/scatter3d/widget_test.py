@@ -18,7 +18,7 @@ def _():
     points = np.random.randn(num_points, 3)
     species_list = ["species1", "species2", "species3"]
     species = random.choices(species_list, k=num_points)
-    species = Category(pandas.Series(species, name="species"))
+    species = Category(pandas.Series(species, name="species"), editable=False)
     countries_list = ["country1", "country2", "country3"]
     countries = random.choices(countries_list, k=num_points)
     countries = Category(pandas.Series(countries, name="countries"))
@@ -29,12 +29,12 @@ def _():
     w = Scatter3dWidget(xyz=points, category=species, point_ids=point_ids)
     w.height = 800
     ui = marimo.ui.anywidget(w)
-    return species, ui, w
+    return Scatter3dWidget, countries, ui, w
 
 
 @app.cell
-def _(species):
-    category = species
+def _(countries):
+    category = countries
     return (category,)
 
 
@@ -47,7 +47,28 @@ def _(category, ui, w):
 
 @app.cell
 def _(w):
-    print(w.active_category)
+    widget = w
+
+    print("AFTER click:",
+          "mode=", widget.interaction_mode_t,
+          "editable=", widget.category_editable_t,
+          "active=", widget.active_category_t)
+
+    return
+
+
+@app.cell
+def _():
+    return
+
+
+@app.cell
+def _(Scatter3dWidget):
+    import scatter3d, inspect
+
+    print("scatter3d module:", scatter3d.__file__)
+    print("Scatter3dWidget source:", inspect.getsourcefile(Scatter3dWidget))
+    print("Scatter3dWidget._sync_traitlets_from_category line:", Scatter3dWidget._sync_traitlets_from_category.__code__.co_firstlineno)
     return
 
 

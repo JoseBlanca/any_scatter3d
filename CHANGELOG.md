@@ -1,3 +1,7 @@
+## 0.1.6 - 2026-01-30
+### Bug fix
+    - Crash fixed when category was changed while a label was selected.
+
 ## 0.1.5 - 2026-01-29
 ### Added
 - Categories can be not editable

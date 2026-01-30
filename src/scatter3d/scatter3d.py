@@ -632,12 +632,30 @@ class Scatter3dWidget(anywidget.AnyWidget):
 
     @traitlets.observe("active_category_t")
     def _on_active_category_t(self, change) -> None:
-        if self.interaction_mode_t == "lasso" and change.get("new") is None:
-            # NOTE: traitlets bypasses @validate(...) when allow_none=True.
-            # In lasso mode, clearing is a hard error (no silent fallback).
+        old = change.get("old")
+        new = change.get("new")
+
+        # DIAGNOSTIC: who is clearing the active category?
+        if old is not None and new is None:
+            import traceback
+
+            print(
+                "[DIAG] active_category_t cleared",
+                {
+                    "old": old,
+                    "new": new,
+                    "mode": self.interaction_mode_t,
+                    "syncing_category": getattr(self, "_syncing_category", None),
+                    "labels_len": len(self.labels_t or []),
+                    "labels_head": list(self.labels_t or [])[:5],
+                },
+            )
+            traceback.print_stack(limit=25)
+
+        # Keep your existing policy/logic:
+        if self.interaction_mode_t == "lasso" and new is None:
             old = change.get("old")
             if old is not None:
-                # restore previous valid value to keep state consistent
                 self.set_trait("active_category_t", old)
             raise traitlets.TraitError("active_category_t cannot be None in lasso mode")
 
@@ -647,15 +665,14 @@ class Scatter3dWidget(anywidget.AnyWidget):
         if getattr(self, "_syncing_category", False):
             return
 
-        if self.interaction_mode_t == "lasso":
-            self._ensure_active_category_invariants()
-        elif self.active_category_t is not None and self.active_category_t not in (
+        # After our new policy, we should never be in lasso mode during a category switch,
+        # and active_category_t should be None. Still, be defensive: never crash.
+        if self.active_category_t is not None and self.active_category_t not in (
             change.get("new") or []
         ):
-            # in rotate mode, invalid active is a real error
-            raise RuntimeError(
-                f"active_category_t={self.active_category_t!r} is not present in labels_t after labels update"
-            )
+            self.active_category_t = None
+            if self.interactive_ready_t:
+                self.send_state("active_category_t")
 
     @traitlets.observe("client_ready_t")
     def _on_client_ready_t(self, change) -> None:
@@ -744,11 +761,9 @@ class Scatter3dWidget(anywidget.AnyWidget):
                 )
             return v
 
-        # rotate mode
+        # rotate mode: do not crash on stale frontend values
         if labels and v not in labels:
-            raise traitlets.TraitError(
-                f"active_category_t={v!r} is not present in labels_t"
-            )
+            return None
         return v
 
     @property
@@ -874,11 +889,7 @@ class Scatter3dWidget(anywidget.AnyWidget):
 
             self.category_editable_t = cat.editable
 
-            if not self.category_editable_t and self.interaction_mode_t == "lasso":
-                self.interaction_mode_t = "rotate"
-                if self.interactive_ready_t:
-                    self.send_state("interaction_mode_t")
-
+            # coded values: uint16 bytes, length N
             coded = cat.coded_values
             if coded.shape[0] != self.num_points:
                 raise RuntimeError(
@@ -886,30 +897,17 @@ class Scatter3dWidget(anywidget.AnyWidget):
                 )
             self.coded_values_t = self._pack_u16_c(coded)
 
+            # colors aligned with labels order
             palette = cat.color_palette  # label -> (r,g,b)
             self.colors_t = [list(map(float, palette[lbl])) for lbl in cat.label_list]
 
+            # missing color
             self.missing_color_t = list(map(float, cat.missing_color))
 
             if len(self.colors_t) != len(self.labels_t):
                 raise RuntimeError(
                     "Internal error: colors_t length must match labels_t length"
                 )
-
-            # Now that labels/colors are consistent, enforce a stable policy for active category.
-            if self.interaction_mode_t == "rotate":
-                if (
-                    self.active_category_t is not None
-                    and self.active_category_t not in self.labels_t
-                ):
-                    # Professional + predictable: clear invalid selection on category switch.
-                    self.active_category_t = None
-                    if self.interactive_ready_t:
-                        self.send_state("active_category_t")
-            else:
-                # lasso mode keeps existing behavior: ensure a valid active label exists.
-                self._ensure_active_category_invariants()
-
         finally:
             self._syncing_category = False
 
@@ -917,6 +915,11 @@ class Scatter3dWidget(anywidget.AnyWidget):
         return self._category
 
     def _set_category(self, category: Category) -> None:
+        # Idempotence: marimo may re-run cells and re-assign the same Category.
+        # That must be a no-op (must not clear active category, mode, etc).
+        if category is self._category:
+            return
+
         if self._xyz is not None and category.num_values != self.num_points:
             raise ValueError(
                 f"The number of values in the category ({category.num_values}) "
@@ -926,6 +929,19 @@ class Scatter3dWidget(anywidget.AnyWidget):
             self._category.unsubscribe(self._category_cb_id)
 
         self._category = category
+
+        # POLICY: changing the category object resets interaction to rotate and clears active.
+        # This must NOT run on Category mutations (coded values edits, palette tweaks, etc.).
+        if self.interaction_mode_t != "rotate":
+            self.interaction_mode_t = "rotate"
+            if self.interactive_ready_t:
+                self.send_state("interaction_mode_t")
+
+        if self.active_category_t is not None:
+            self.active_category_t = None
+            if self.interactive_ready_t:
+                self.send_state("active_category_t")
+
         # Subscribe to new category
         self._category_cb_id = category.subscribe(self._on_category_changed)
         self._sync_traitlets_from_category()
