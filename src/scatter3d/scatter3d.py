@@ -635,23 +635,6 @@ class Scatter3dWidget(anywidget.AnyWidget):
         old = change.get("old")
         new = change.get("new")
 
-        # DIAGNOSTIC: who is clearing the active category?
-        if old is not None and new is None:
-            import traceback
-
-            print(
-                "[DIAG] active_category_t cleared",
-                {
-                    "old": old,
-                    "new": new,
-                    "mode": self.interaction_mode_t,
-                    "syncing_category": getattr(self, "_syncing_category", None),
-                    "labels_len": len(self.labels_t or []),
-                    "labels_head": list(self.labels_t or [])[:5],
-                },
-            )
-            traceback.print_stack(limit=25)
-
         # Keep your existing policy/logic:
         if self.interaction_mode_t == "lasso" and new is None:
             old = change.get("old")
