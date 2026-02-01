@@ -1,3 +1,7 @@
+## 0.1.7 - 2026-02-01
+### Bug fix
+    - Label selection was not working.
+
 ## 0.1.6 - 2026-01-30
 ### Bug fix
     - Crash fixed when category was changed while a label was selected.
