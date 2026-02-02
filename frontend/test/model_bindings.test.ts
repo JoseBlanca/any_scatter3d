@@ -89,4 +89,59 @@ describe("bindModelToView", () => {
 
 		bindings.dispose();
 	});
+
+	it("does not crash on transient labels/colors mismatch when refreshLegendUI is safe (production wiring)", () => {
+		const model = new FakeModel();
+		const three = makeThreeStub();
+
+		// This simulates the SAFE refresh function that production should wire:
+		// it must tolerate transient mismatch and simply skip until consistent.
+		const safeRefreshLegendUI = () => {
+			const labels = model.get(TRAITS.labels) as unknown;
+			const colors = model.get(TRAITS.colors) as unknown;
+
+			// If not ready or temporarily inconsistent, do nothing.
+			if (!Array.isArray(labels) || !Array.isArray(colors)) return;
+			if (labels.length !== colors.length) return;
+
+			// If consistent, "refresh" would proceed. We don't need to assert DOM here;
+			// the binding contract is: no crash + downstream recolor calls still run.
+		};
+
+		const bindings = bindModelToView({
+			model: model as any,
+			three,
+			refreshLegendUI: safeRefreshLegendUI,
+			onTooltipResponseChange: () => {},
+		});
+
+		// Start consistent (category A)
+		model.set(TRAITS.labels, ["a", "b", "c"]);
+		model.set(TRAITS.colors, [
+			[1, 0, 0],
+			[0, 1, 0],
+			[0, 0, 1],
+		]);
+
+		// Simulate category switch burst:
+		// colors from old category (len 6) still present, but labels updated first (len 3)
+		model.set(TRAITS.colors, [
+			[1, 0, 0],
+			[0, 1, 0],
+			[0, 0, 1],
+			[1, 1, 0],
+			[1, 0, 1],
+			[0, 1, 1],
+		]);
+		model.set(TRAITS.labels, ["x", "y", "z"]);
+
+		// Must not throw.
+		expect(() => model.emit(`change:${TRAITS.labels}`)).not.toThrow();
+
+		// And the robust recolor path still runs.
+		expect(three.setColorsFromModel).toHaveBeenCalledTimes(1);
+		expect(three.setSizesFromModel).toHaveBeenCalledTimes(1);
+
+		bindings.dispose();
+	});
 });

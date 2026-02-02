@@ -53,7 +53,6 @@ def _(w):
           "mode=", widget.interaction_mode_t,
           "editable=", widget.category_editable_t,
           "active=", widget.active_category_t)
-
     return
 
 

@@ -137,8 +137,8 @@ export function buildWidget(
 		transportReady,
 	});
 
-	// Initial render once traits are present
-	legendController.refreshFromModel();
+	// Initial render once traits are present (safe against non-atomic initial sync)
+	legendController.scheduleRefresh();
 
 	function syncUiFromState() {
 		const mode =
@@ -208,7 +208,7 @@ export function buildWidget(
 	const modelBindings = bindModelToView({
 		model: dbgModel,
 		three,
-		refreshLegendUI: legendController.refreshFromModel,
+		refreshLegendUI: legendController.scheduleRefresh,
 		onTooltipResponseChange: tooltipController.onTooltipResponseChange,
 	});
 

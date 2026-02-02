@@ -65,7 +65,8 @@ function readDock(x: unknown): "top" | "bottom" {
 }
 
 export function createLegendController(deps: LegendControllerDeps): {
-	refreshFromModel: () => void;
+	refreshFromModel: () => void; // strict (may throw)
+	scheduleRefresh: () => void; // safe (never throws on transient mismatch)
 	dispose: () => void;
 } {
 	const { model, view, transportReady } = deps;
@@ -205,6 +206,7 @@ export function createLegendController(deps: LegendControllerDeps): {
 
 	return {
 		refreshFromModel,
+		scheduleRefresh,
 		dispose: () => {
 			model.off(`change:${TRAITS.labels}`, onLegendTraitChange);
 			model.off(`change:${TRAITS.colors}`, onLegendTraitChange);
