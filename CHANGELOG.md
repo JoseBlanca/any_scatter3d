@@ -1,3 +1,7 @@
+## 0.1.8 - 2026-02-02
+### Bug fix
+    - In some cases there could be a temporary mismatch between traitlets.
+
 ## 0.1.7 - 2026-02-01
 ### Bug fix
     - Label selection was not working.
