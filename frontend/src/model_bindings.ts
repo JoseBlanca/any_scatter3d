@@ -18,11 +18,69 @@ export function bindModelToView(deps: ModelBindingsDeps): {
 } {
 	const { model, three, refreshLegendUI, onTooltipResponseChange } = deps;
 
+	// Coalesce/guard recolor bursts. Trait updates from Python are not atomic;
+	// we may briefly observe codedValues and palette out of sync. That must not
+	// crash production; we retry once on the next microtask.
+	let recolorScheduled = false;
+	let recolorRetryArmed = false;
+
+	function isTransientRecolorError(err: unknown): boolean {
+		if (!(err instanceof Error)) return false;
+		const m = err.message;
+		return (
+			m.startsWith("No color for code=") ||
+			m.startsWith("coded_values_t length") ||
+			m.startsWith('active_category_t="') || // active not found in labels
+			m.includes("not found in labels_t")
+		);
+	}
+
+	function tryRecolorStrict(): boolean {
+		try {
+			three.setColorsFromModel();
+			three.setSizesFromModel();
+			return true;
+		} catch (err) {
+			if (isTransientRecolorError(err)) return false;
+			throw err;
+		}
+	}
+
+	function scheduleRecolor() {
+		if (recolorScheduled) return;
+		recolorScheduled = true;
+
+		queueMicrotask(() => {
+			recolorScheduled = false;
+
+			const ok = tryRecolorStrict();
+			if (ok) {
+				recolorRetryArmed = false;
+				return;
+			}
+
+			if (!recolorRetryArmed) {
+				recolorRetryArmed = true;
+				scheduleRecolor();
+			} else {
+				recolorRetryArmed = false;
+				console.warn(
+					"[bindings] transient recolor mismatch did not converge after retry; skipping",
+				);
+			}
+		});
+	}
+
+	function recolorNowOrRetry() {
+		const ok = tryRecolorStrict();
+		if (!ok) scheduleRecolor();
+	}
+
 	const onXYZChange = () => {
 		three.setPointsFromModel();
-		// points changed => dependent buffers must be recomputed
-		three.setColorsFromModel();
-		three.setSizesFromModel();
+		// points changed => dependent buffers must be recomputed,
+		// but codedValues/palette may arrive non-atomically.
+		recolorNowOrRetry();
 	};
 
 	const onPointSizeChange = () => {
@@ -32,14 +90,12 @@ export function bindModelToView(deps: ModelBindingsDeps): {
 	// Legend traits changed: refresh legend UI and recolor points (robust path)
 	const onLegendChange = () => {
 		refreshLegendUI();
-		three.setColorsFromModel();
-		three.setSizesFromModel();
+		recolorNowOrRetry();
 	};
 
 	// Non-legend changes that still affect point colors (coded values)
 	const onCodedValuesChange = () => {
-		three.setColorsFromModel();
-		three.setSizesFromModel();
+		recolorNowOrRetry();
 	};
 
 	const onLassoResultChange = () => {

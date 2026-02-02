@@ -144,4 +144,94 @@ describe("bindModelToView", () => {
 
 		bindings.dispose();
 	});
+
+	it("does not crash on transient codedValues/palette mismatch and retries", async () => {
+		const model = new FakeModel();
+
+		// Three stub that reproduces the *real* failure mode:
+		// throw if max code exceeds palette length.
+		const three = makeThreeStub();
+		three.setColorsFromModel = vi.fn(() => {
+			const colors = model.get(TRAITS.colors) as unknown;
+			const codes = model.get(TRAITS.codedValues) as unknown;
+
+			if (!Array.isArray(colors)) {
+				throw new Error("colors_t must be an array");
+			}
+			if (!(codes instanceof Uint16Array)) {
+				throw new Error("coded_values_t must be Uint16Array in test");
+			}
+
+			const paletteLen = colors.length;
+			let maxCode = 0;
+			for (let i = 0; i < codes.length; i++) {
+				if (codes[i] > maxCode) maxCode = codes[i];
+			}
+			if (maxCode > paletteLen) {
+				throw new Error(
+					`No color for code=${maxCode} (palette length=${paletteLen}); expected palette[${maxCode - 1}]`,
+				);
+			}
+		});
+
+		three.setSizesFromModel = vi.fn(() => {
+			// mimic a strict size path too (same code range issue can exist)
+			const colors = model.get(TRAITS.colors) as unknown;
+			const codes = model.get(TRAITS.codedValues) as unknown;
+
+			if (!Array.isArray(colors)) throw new Error("colors_t must be an array");
+			if (!(codes instanceof Uint16Array)) {
+				throw new Error("coded_values_t must be Uint16Array in test");
+			}
+
+			const paletteLen = colors.length;
+			let maxCode = 0;
+			for (let i = 0; i < codes.length; i++) {
+				if (codes[i] > maxCode) maxCode = codes[i];
+			}
+			if (maxCode > paletteLen) {
+				throw new Error(
+					`No size for code=${maxCode} (palette length=${paletteLen})`,
+				);
+			}
+		});
+
+		const bindings = bindModelToView({
+			model: model as any,
+			three,
+			refreshLegendUI: vi.fn(),
+			onTooltipResponseChange: vi.fn(),
+		});
+
+		// Start with palette length 3
+		model.set(TRAITS.colors, [
+			[1, 0, 0],
+			[0, 1, 0],
+			[0, 0, 1],
+		]);
+
+		// Transient state: coded values include code=4 (needs palette length >= 4)
+		model.set(TRAITS.codedValues, new Uint16Array([1, 4, 2]));
+
+		// This is the bug: recolor triggered while inconsistent must not crash.
+		expect(() => model.emit(`change:${TRAITS.labels}`)).not.toThrow();
+
+		// Now "next update" arrives: palette becomes length 4
+		model.set(TRAITS.colors, [
+			[1, 0, 0],
+			[0, 1, 0],
+			[0, 0, 1],
+			[1, 1, 0],
+		]);
+		expect(() => model.emit(`change:${TRAITS.colors}`)).not.toThrow();
+
+		// Allow any scheduled retry to run
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(three.setColorsFromModel).toHaveBeenCalled();
+		expect(three.setSizesFromModel).toHaveBeenCalled();
+
+		bindings.dispose();
+	});
 });

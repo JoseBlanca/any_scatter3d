@@ -1,3 +1,7 @@
+## 0.1.9 - 2026-02-02
+### Bug fix
+    - Avoid failing during some temporary inconsistent state.
+
 ## 0.1.8 - 2026-02-02
 ### Bug fix
     - In some cases there could be a temporary mismatch between traitlets.
