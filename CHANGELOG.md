@@ -1,3 +1,11 @@
+## 0.1.11 - 2026-02-03
+### Dependencies downgrade
+    - Downgrade numpy to be compatible with WASM.
+
+## 0.1.10 - 2026-02-03
+### Dependencies downgrade
+    - Downgrade python and narhwals to be compatible with WASM.
+
 ## 0.1.9 - 2026-02-02
 ### Bug fix
     - Avoid failing during some temporary inconsistent state.
