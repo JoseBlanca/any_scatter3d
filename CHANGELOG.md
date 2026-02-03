@@ -1,3 +1,7 @@
+## 0.1.12 - 2026-02-03
+### Bug fix
+    - Fix bugs due to the downgrading.
+
 ## 0.1.11 - 2026-02-03
 ### Dependencies downgrade
     - Downgrade numpy to be compatible with WASM.
