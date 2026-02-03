@@ -158,10 +158,51 @@ class Category:
         return label_coding
 
     def _encode_values(self, values):
-        coded_values = values.replace_strict(
-            self._label_coding, default=0, return_dtype=narwhals.UInt16
-        ).to_numpy()
-        self._coded_values = coded_values
+        mapping = self._label_coding
+        if mapping is None:
+            raise RuntimeError("label coding should be set, but it is not")
+
+        # Fast-path: no labels => everything is "unassigned" (0).
+        # Also avoids Narwhals 2.6.0 pandas replace_strict merge bugs with empty mapping.
+        if len(mapping) == 0:
+            # preserve length
+            n = int(values.len()) if hasattr(values, "len") else len(values.to_native())
+            self._coded_values = numpy.zeros(n, dtype=numpy.uint16)
+            return
+
+        # Narwhals 2.6.0 + pandas backend: replace_strict breaks if series.name is None
+        if values.name is None:
+            tmp_name = "__scatter3d_tmp_category__"
+            if values.implementation == narwhals.Implementation.PANDAS:
+                native = values.to_native()
+                # native is a pandas.Series
+                native = native.rename(tmp_name)
+                values = narwhals.from_native(native, series_only=True)
+            else:
+                # rebuild as a named Narwhals series for other backends
+                # (to_native may return a backend-native Series; name handling varies)
+                arr = values.to_numpy()
+                values = narwhals.new_series(
+                    name=tmp_name, values=arr, backend=values.implementation
+                )
+
+        try:
+            # Newer Narwhals path
+            coded = values.replace_strict(
+                mapping, default=0, return_dtype=narwhals.UInt16
+            )
+            self._coded_values = coded.to_numpy()
+            return
+        except TypeError as e:
+            if "default" not in str(e):
+                raise
+
+        # Narwhals 2.6.0 path: no default; fill nulls after strict replace
+        coded = values.replace_strict(mapping, return_dtype=narwhals.UInt16)
+
+        # fill_null exists on many backends; if it doesn't, fall back to numpy fill
+        coded = coded.fill_null(0)
+        self._coded_values = coded.to_numpy()
 
     @property
     def values(self):
