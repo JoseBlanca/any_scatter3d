@@ -1,6 +1,6 @@
 [project]
 name = "scatter3d-anywidget"
-version = "0.1.12"
+version = "0.1.13"
 description = "3D scatter widget with lasso selection"
 readme = "README.md"
 requires-python = ">=3.12"

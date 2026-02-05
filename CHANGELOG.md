@@ -1,3 +1,10 @@
+## 0.1.13 - 2026-02-05
+### Changed
+- Remove sourcemap file from distribution to speed up installation.
+
+### Bug fix
+    - Fix bug, sometimes when changing from one category to another the colors were not correctly updated.
+
 ## 0.1.12 - 2026-02-03
 ### Bug fix
     - Fix bugs due to the downgrading.
