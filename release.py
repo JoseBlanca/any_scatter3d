@@ -87,12 +87,19 @@ def build_ts(ts_project_dir, ts_compiled_dir):
     js = ts_compiled_dir / "scatter3d.js"
     js_map = ts_compiled_dir / "scatter3d.js.map"
 
-    missing = [p.name for p in (js, js_map) if not p.is_file()]
-    if missing:
+    if not js.is_file():
         raise RuntimeError(
-            "TypeScript build did not produce required artifacts in "
-            f"{ts_compiled_dir}: missing {missing}. "
-            "Check your frontend build output directory configuration."
+            "TypeScript build did not produce scatter3d.js in "
+            f"{ts_compiled_dir}. Check your frontend build output configuration."
+        )
+    # Ensure no sourcemap is shipped (even if leftover from a previous build).
+    js_map = ts_compiled_dir / "scatter3d.js.map"
+    if js_map.exists():
+        js_map.unlink()
+    if js_map.is_file():
+        raise RuntimeError(
+            "TypeScript produced scatter3d.js.map in "
+            f"{ts_compiled_dir}. Check your frontend build output configuration."
         )
 
     print("Ts built")
@@ -121,7 +128,6 @@ def check_built_wheel_contents(project_dir: Path) -> None:
         "scatter3d/__init__.py",
         "scatter3d/scatter3d.py",
         "scatter3d/static/scatter3d.js",
-        "scatter3d/static/scatter3d.js.map",
     ]
     forbidden_substrings = [
         "__pycache__/",
@@ -130,6 +136,7 @@ def check_built_wheel_contents(project_dir: Path) -> None:
     forbidden_suffixes = [
         ".pyc",
         ".pyo",
+        ".js.map",
     ]
 
     with zipfile.ZipFile(wheel_path, "r") as zf:
@@ -166,40 +173,10 @@ def check_built_wheel_contents(project_dir: Path) -> None:
     print(f"Built wheel content OK: {wheel_path.name}")
 
 
-def check_sourcemap_paths(map_path: Path) -> None:
-    if not map_path.is_file():
-        raise RuntimeError(f"Missing sourcemap: {map_path}")
-
-    data = json.loads(map_path.read_text(encoding="utf-8"))
-    sources = data.get("sources", [])
-    if not isinstance(sources, list) or not sources:
-        raise RuntimeError(f"{map_path} has no 'sources' list")
-
-    # Fail if we see absolute paths (POSIX or Windows drive paths)
-    bad = []
-    for s in sources:
-        if not isinstance(s, str):
-            continue
-        if (
-            s.startswith("/")
-            or (len(s) >= 3 and s[1:3] == ":/")
-            or (len(s) >= 3 and s[1:3] == ":\\")
-        ):
-            bad.append(s)
-
-    if bad:
-        preview = bad[:10]
-        raise RuntimeError(
-            f"Sourcemap contains absolute paths ({len(bad)}). Examples: {preview}"
-        )
-    print("Ts source map seem OK")
-
-
 clean_dist(PROJECT_DIR)
 check_python_tests(PYTHON_TEST_DIR)
 check_ts_tests(TS_PROJECT_DIR)
 clean_caches_in_python_src(PYTHON_SRC_PACKAGE_DIR)
 build_ts(TS_PROJECT_DIR, TS_COMPILED_DIR)
-check_sourcemap_paths(TS_COMPILED_DIR / "scatter3d.js.map")
 build_python_package(PROJECT_DIR)
 check_built_wheel_contents(PROJECT_DIR)

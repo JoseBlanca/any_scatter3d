@@ -10,7 +10,7 @@ export default defineConfig({
 		},
 		outDir: path.resolve(__dirname, "../src/scatter3d/static"),
 		emptyOutDir: true,
-		sourcemap: true,
+		sourcemap: false,
 
 		rollupOptions: {
 			// Ensure deps like `three` are bundled into scatter3d.js
