@@ -20,54 +20,37 @@ def _():
     species = random.choices(species_list, k=num_points)
     species = Category(pandas.Series(species, name="species"), editable=False)
     countries_list = ["country1", "country2", "country3"]
-    countries = random.choices(countries_list, k=num_points)
+    countries = random.choices([countries_list[1]], k=num_points)
     countries = Category(pandas.Series(countries, name="countries"))
 
-    species2 = random.choices(species_list, k=num_points)
+    species2 = random.choices(["species"], k=num_points)
     species2 = Category(pandas.Series(species2, name="species2"), editable=False)
 
     w = Scatter3dWidget(xyz=points, category=species, point_ids=point_ids)
     w.height = 800
     ui = marimo.ui.anywidget(w)
-    return Scatter3dWidget, countries, ui, w
+    return countries, marimo, species, species2, ui, w
 
 
 @app.cell
-def _(countries):
-    category = countries
-    return (category,)
+def _(countries, marimo, species, species2):
+    chooser = marimo.ui.dropdown(
+        options={
+            "species (non-editable)": species,
+            "countries (editable)": countries,
+            "species2 (non-editable, 1 label)": species2,
+        },
+        value="species (non-editable)",
+        label="Category",
+    )
+    chooser
+    return (chooser,)
 
 
 @app.cell
-def _(category, ui, w):
-    w.category = category
+def _(chooser, ui, w):
+    w.category = chooser.value
     ui
-    return
-
-
-@app.cell
-def _(w):
-    widget = w
-
-    print("AFTER click:",
-          "mode=", widget.interaction_mode_t,
-          "editable=", widget.category_editable_t,
-          "active=", widget.active_category_t)
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _(Scatter3dWidget):
-    import scatter3d, inspect
-
-    print("scatter3d module:", scatter3d.__file__)
-    print("Scatter3dWidget source:", inspect.getsourcefile(Scatter3dWidget))
-    print("Scatter3dWidget._sync_traitlets_from_category line:", Scatter3dWidget._sync_traitlets_from_category.__code__.co_firstlineno)
     return
 
 

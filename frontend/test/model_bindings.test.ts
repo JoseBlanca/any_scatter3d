@@ -234,4 +234,102 @@ describe("bindModelToView", () => {
 
 		bindings.dispose();
 	});
+	it("repro: editable->non-editable switch can skip recolor if active_category_t is stale (not in labels_t)", async () => {
+		const model = new FakeModel();
+
+		// Strict-ish three stub that mimics the failure mode in three_scene.setColorsFromModel:
+		// throw if active_category_t is not in labels_t.
+		const three = {
+			setPointsFromModel: vi.fn(),
+			setAxesFromModel: vi.fn(),
+			rebuildAxisLabels: vi.fn(),
+			setColorsFromModel: vi.fn(() => {
+				const active = model.get(TRAITS.activeCategory);
+				const labelsRaw = model.get(TRAITS.labels);
+
+				if (active === null || active === undefined) return;
+				if (typeof active !== "string") {
+					throw new Error(
+						`active_category_t must be string|null|undefined, got ${typeof active}`,
+					);
+				}
+				if (!Array.isArray(labelsRaw)) {
+					throw new Error(
+						`labels_t must be an array when active_category_t is set`,
+					);
+				}
+
+				const labels = labelsRaw.map((v) => String(v));
+				if (!labels.includes(active)) {
+					// IMPORTANT: this exact prefix is what bindModelToView classifies as transient
+					throw new Error(
+						`active_category_t="${active}" not found in labels_t`,
+					);
+				}
+			}),
+			setSizesFromModel: vi.fn(() => {
+				// Mirror the same strictness; bindings call sizes right after colors.
+				const active = model.get(TRAITS.activeCategory);
+				const labelsRaw = model.get(TRAITS.labels);
+
+				if (active === null || active === undefined) return;
+				if (typeof active !== "string")
+					throw new Error(`active_category_t must be string|null`);
+				if (!Array.isArray(labelsRaw))
+					throw new Error(
+						`labels_t must be array when active_category_t is set`,
+					);
+
+				const labels = labelsRaw.map((v) => String(v));
+				if (!labels.includes(active)) {
+					throw new Error(
+						`active_category_t="${active}" not found in labels_t`,
+					);
+				}
+			}),
+		} as any;
+
+		const refreshLegendUI = vi.fn();
+		const bindings = bindModelToView({
+			model: model as any,
+			three,
+			refreshLegendUI,
+			onTooltipResponseChange: vi.fn(),
+		});
+
+		// Initial state: editable category with a valid active label
+		model.set(TRAITS.labels, ["a", "b"]);
+		model.set(TRAITS.activeCategory, "a");
+
+		// Spy on warning emitted after retries fail
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		// Switch to a non-editable category, but (buggy) active_category_t remains "a"
+		// while labels_t becomes ["x","y"]. This should cause recolor to fail and then be skipped.
+		model.set(TRAITS.labels, ["x", "y"]);
+		model.emit(`change:${TRAITS.labels}`);
+
+		// Let the scheduled retries run (queueMicrotask). Two awaits is enough with this harness.
+		await Promise.resolve();
+		await Promise.resolve();
+
+		// What we want to capture:
+		// - legend refresh ran (user sees legend update)
+		expect(refreshLegendUI).toHaveBeenCalledTimes(1);
+
+		// - recolor was attempted (immediate + 2 microtask retries = 3 calls)
+		// setColorsFromModel throws (stale active label), so setSizesFromModel is never reached.
+		// We expect 1 immediate attempt + 2 retries = 3 total calls.
+		expect(three.setColorsFromModel).toHaveBeenCalledTimes(3);
+		expect(three.setSizesFromModel).toHaveBeenCalledTimes(0);
+
+		// - after failing to converge, bindings warned and skipped (user sees stale colors)
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn.mock.calls[0]?.[0]).toContain(
+			"transient recolor mismatch did not converge",
+		);
+
+		warn.mockRestore();
+		bindings.dispose();
+	});
 });

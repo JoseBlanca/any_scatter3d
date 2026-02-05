@@ -548,6 +548,16 @@ class Scatter3dWidget(anywidget.AnyWidget):
         help="Whether the active category is editable (enables lasso UI).",
     ).tag(sync=True)
 
+    # Traits that are Python-authoritative and must never be accepted from frontend set_state.
+    _PYTHON_OWNED_TRAITS = {
+        "xyz_bytes_t",
+        "coded_values_t",
+        "labels_t",
+        "colors_t",
+        "missing_color_t",
+        "category_editable_t",
+    }
+
     def __init__(
         self,
         xyz: numpy.ndarray,
@@ -593,6 +603,39 @@ class Scatter3dWidget(anywidget.AnyWidget):
 
         # Enforce initial invariants (rotate default allows empty active category)
         self._ensure_active_category_invariants()
+
+    def set_state(self, sync_data):
+        had_python_owned = False
+
+        if isinstance(sync_data, dict):
+            had_python_owned = any(k in sync_data for k in self._PYTHON_OWNED_TRAITS)
+
+            # Drop python-authoritative traits echoed by marimo/anywidget
+            sync_data = {
+                k: v for k, v in sync_data.items() if k not in self._PYTHON_OWNED_TRAITS
+            }
+
+        out = super().set_state(sync_data)
+
+        # Workaround for marimo anywidget stale-state echo:
+        # If python-owned traits were seen inbound (and dropped),
+        # force the frontend to reconverge with Python's authoritative state.
+        if had_python_owned and getattr(self, "interactive_ready_t", False):
+            if not getattr(self, "_resyncing_python_owned", False):
+                self._resyncing_python_owned = True
+                try:
+                    for trait in (
+                        "labels_t",
+                        "colors_t",
+                        "missing_color_t",
+                        "coded_values_t",
+                        "category_editable_t",
+                    ):
+                        self.send_state(trait)
+                finally:
+                    self._resyncing_python_owned = False
+
+        return out
 
     @traitlets.validate("widget_height_px_t")
     def _validate_widget_height_px_t(self, proposal):
@@ -913,12 +956,30 @@ class Scatter3dWidget(anywidget.AnyWidget):
 
             self.category_editable_t = cat.editable
 
+            # --- keep active_category_t consistent with new labels_t ---
+            # Category sync can remove labels. In rotate mode we allow active_category_t=None,
+            # but we must never keep a stale label that is not present in labels_t,
+            # because the frontend recolor path will treat it as transient and may skip updates.
+            if self.interaction_mode_t == "rotate":
+                if (
+                    self.active_category_t is not None
+                    and self.active_category_t not in labels
+                ):
+                    self.active_category_t = None
+                    if self.interactive_ready_t:
+                        self.send_state("active_category_t")
+            else:
+                # In lasso mode, active_category_t must be valid and non-empty.
+                # This will deterministically pick the first label if needed.
+                self._ensure_active_category_invariants()
+
             # coded values: uint16 bytes, length N
             coded = cat.coded_values
             if coded.shape[0] != self.num_points:
                 raise RuntimeError(
                     f"Category has {coded.shape[0]} values but xyz has {self.num_points} points"
                 )
+
             self.coded_values_t = self._pack_u16_c(coded)
 
             # colors aligned with labels order

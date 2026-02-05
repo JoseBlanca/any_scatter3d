@@ -102,3 +102,39 @@ def test_category_mutation_does_not_clear_active_label_in_rotate_mode():
     cat.set_coded_values(coded_values=coded, label_list=cat.label_list)
 
     assert w.active_category_t == "A"
+
+
+def test_active_category_is_cleared_when_category_labels_drop_it_in_rotate_mode():
+    # Minimal widget
+    xyz = np.zeros((3, 3), dtype=np.float32)
+    cat = scatter3d.Category(pd.Series(["a", "b", "c"], dtype="object"), editable=True)
+    w = scatter3d.Scatter3dWidget(xyz=xyz, category=cat, point_ids=["p1", "p2", "p3"])
+
+    # Sanity: default mode is rotate
+    assert w.interaction_mode_t == "rotate"
+
+    # Set an active category that will be removed
+    w.active_category_t = "c"
+    assert w.active_category_t == "c"
+
+    # Mutate the Category label list so "c" disappears.
+    # This triggers Category callbacks => widget._sync_traitlets_from_category()
+    cat.set_label_list(
+        ["a", "b"], on_missing_labels=scatter3d.LabelListErrorResponse.SET_MISSING
+    )
+
+    # REQUIRED invariant (rotate mode): active_category_t must be None or valid in labels_t.
+    assert w.active_category_t is None
+
+
+def test_inbound_set_state_cannot_override_python_owned_coded_values():
+    xyz = np.zeros((3, 3), dtype=np.float32)
+    cat = scatter3d.Category(pd.Series(["a", "b", "a"], dtype="object"), editable=True)
+    w = scatter3d.Scatter3dWidget(xyz=xyz, category=cat, point_ids=["p1", "p2", "p3"])
+
+    original = w.coded_values_t
+
+    # Simulate a buggy frontend/marimo echo trying to push coded_values_t back.
+    w.set_state({"coded_values_t": b"\x01\x00\x02\x00\x03\x00"})
+
+    assert w.coded_values_t == original
