@@ -1,3 +1,7 @@
+## 0.1.14 - 2026-03-04
+### Changed
+- Update pinned dependency versions to latest pyodide.
+
 ## 0.1.13 - 2026-02-05
 ### Changed
 - Remove sourcemap file from distribution to speed up installation.
